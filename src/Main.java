@@ -2,7 +2,7 @@
  * This class creates the primary hub or "board" which drives the functionality
  * of the Gas Pump project
  *
- * Commit Test, Tomas
+ * Commit Test on Mac, Tomas
  */
 
 public class Main {
