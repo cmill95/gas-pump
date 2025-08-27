@@ -11,7 +11,7 @@ public class Main {
 
 
         while (true) {
-            System.out.println("hi");
+            System.out.println("hello");
         }
     }
 }
