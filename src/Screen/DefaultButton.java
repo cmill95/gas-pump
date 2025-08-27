@@ -1,13 +1,12 @@
-import javafx.geometry.Insets;
+package Screen;
+
 import javafx.scene.control.Button;
-import javafx.scene.layout.Background;
-import javafx.scene.layout.BackgroundFill;
-import javafx.scene.layout.CornerRadii;
-import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
-import javafx.scene.text.Text;
 
 
+/**
+ * This class defines the Buttons which appear in the Gas Pump GUI.
+ */
 public class DefaultButton extends Button {
 
     private int number;

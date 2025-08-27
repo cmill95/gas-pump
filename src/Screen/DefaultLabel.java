@@ -1,3 +1,5 @@
+package Screen;
+
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Label;
@@ -7,6 +9,10 @@ import javafx.scene.layout.CornerRadii;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 
+
+/**
+ * This class creates the labels which are displayed in the Gas Pump GUI.
+ */
 public class DefaultLabel extends Label {
 
     private int number;
