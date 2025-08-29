@@ -1,2 +1,3 @@
-package ui;public class HoseTesterApp {
+package ui;
+public class HoseTesterApp {
 }
