@@ -1,8 +1,10 @@
 package devices;
 
-import io.bus.DeviceLink;
+import io.bus.*;
 import java.io.IOException;
+import java.sql.Time;
 import java.util.Base64;
+import java.time.*;
 
 /*Flow Meter Communicator
 * Sends -> Flow Rates -> Main
@@ -13,16 +15,25 @@ import java.util.Base64;
 public final class FlowMeter {
     //Fields and Constructors
     private final DeviceLink link;
-    public FlowMeter(DeviceLink link) {this.link = link;}
-    public float price = 0.0F;
+    private String status;
+    public FlowMeter(DeviceLink link,  String status) {
+        this.link = link;
+        this.status = status;
+    }
+
+    //Hypothetical Values, Need to update when Main sends
+    public float price = 2.79F;
     private float runningTotal = 0.0F;
     private float runningAmount = 0.0F;
+
 
     /**
      * Use a Timer to Calculate amounts of Gallons
      * Use runningAmount to Calculate runningTotal
      */
-    private void start() {}
+    private void start() throws IOException {
+
+    }
 
     /**
      *
