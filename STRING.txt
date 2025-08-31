@@ -1,0 +1,19 @@
+Gas Pump Markup Language
+
+<DEVICE>|<ACTION>|<TARGET>|<CONTENT>
+
+DEVICE : The device receiving the message. Examples: SCREEN, PUMP, FLOWMETER
+
+ACTION : The operation to perform. Examples: DISPLAY, UPDATE, PAUSE, START
+
+TARGET: The specific part of the device where the action happens, mostly used in Screen, but can use ALL in other cases. Examples: ROW1, FIELD01, BUTTON0, ALL
+
+CONTENT: The text of the message, likely used for Screen only, and None in other cases. Examples: "Welcome!", "Turn off", "Connected", None
+
+Examples:
+
+SCREEN|UPDATE|BUTTON0|"Turn on"
+
+SCREEN|DISPLAY|ROW1|"Please pay now"
+
+FLOWMETER|START|ALL|None
