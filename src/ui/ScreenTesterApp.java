@@ -1,6 +1,7 @@
 package ui;
 
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.beans.value.ChangeListener;
 import javafx.geometry.Insets;
 import javafx.geometry.Orientation;
@@ -47,6 +48,12 @@ public class ScreenTesterApp extends Application {
 
         stage.setResizable(true);
 
+
+        // Force closes App. when GUI closed
+        stage.setOnCloseRequest(e -> {
+            Platform.exit();   // shuts down JavaFX runtime
+            System.exit(0);    // ensures JVM ends
+        });
 
 
         stage.setScene(defaultScene);
