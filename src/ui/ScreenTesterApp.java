@@ -64,6 +64,8 @@ public class ScreenTesterApp extends Application {
 
         // Force closes App. when GUI closed
         stage.setOnCloseRequest(e -> {
+            try { if (link != null) link.close(); } catch (Exception ignore) {}
+            ioPool.shutdownNow();
             Platform.exit();   // shuts down JavaFX runtime
             System.exit(0);    // ensures JVM ends
         });
@@ -164,13 +166,21 @@ public class ScreenTesterApp extends Application {
         }
     }
 
+    private final java.util.concurrent.ExecutorService ioPool =
+            java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "ScreenLink-IO"); t.setDaemon(true); return t;
+            });
+
     private void send(String msg) {
-
-        // TODO: Message needs to be sent out to Screen and DeviceLink
-        // - EX) "MAIN|BUTTON|Button#"
-
-        
-
+        if (screen == null || msg == null || msg.isBlank()) return;
+        ioPool.submit(() -> {
+            try {
+                if ("CLEAR".equalsIgnoreCase(msg)) screen.clear();
+                else screen.printLine(msg);
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+        });
     }
 
     /**
@@ -205,8 +215,9 @@ public class ScreenTesterApp extends Application {
 
                 // This assumes buttons are squares
                 DefaultButton button = new DefaultButton(counter, rowHeight, defaultFont);
+                button.setActive(true);
                 button.setOnMouseClicked(e -> {
-                    defaultButonPressed(button);
+                    defaultButtonPressed(button);
                 });
                 buttons.add(button);
                 counter++;
@@ -243,12 +254,10 @@ public class ScreenTesterApp extends Application {
      *
      * @param button the button that was pressed is passed to this method from the event handler
      */
-    private void defaultButonPressed(DefaultButton button) {
-
-        if (button.getActive()) {
-            button.defaultButtonPressed();
-            send("MAIN|BUTTON|" + button.number);
-        }
+    private void defaultButtonPressed(DefaultButton button)
+    {
+        button.defaultButtonPressed();
+        send("MAIN|BUTTON " + button.getNumber());
     }
 
 
@@ -287,8 +296,8 @@ public class ScreenTesterApp extends Application {
             this.height = height;
             this.width = width;
             this.font = font;
-            this.leftButton = buttons.getFirst();
-            this.rightButton = buttons.getLast();
+            this.leftButton = buttons.get(0);
+            this.rightButton = buttons.get(1);
 
 
             // This method call creates and assigns the three labels
@@ -307,7 +316,7 @@ public class ScreenTesterApp extends Application {
          */
         public void receiveMessage(List<String> parts) {
 
-            if (parts.getFirst().equals("BUTTON")) {
+            if (parts.get(0).equals("BUTTON")) {
 
                 switch (parts.get(1)) {
 
@@ -341,7 +350,7 @@ public class ScreenTesterApp extends Application {
                 }
             }
 
-            else if (parts.getFirst().equals("LABEL")) {
+            else if (parts.get(0).equals("LABEL")) {
 
                 switch (parts.get(1)) {
 

@@ -10,13 +10,16 @@ public final class SimDevices {
     public static void main(String[] args) throws Exception {
         int screenPort = 5001;
         int binaryPort = 5101;
+        int flowMeterPort = 5201;
 
         // Allow overriding ports via args if needed
         if (args.length >= 1) screenPort = Integer.parseInt(args[0]);
         if (args.length >= 2) binaryPort = Integer.parseInt(args[1]);
+        if (args.length >= 2) flowMeterPort = Integer.parseInt(args[2]);
 
         SimScreenDevice screen = new SimScreenDevice("screen-01", screenPort);
         SimBinaryDevice valve  = new SimBinaryDevice("valve-01", binaryPort);
+        //SimFlowMeter flowmeter = new SimFlowMeter("meter-01", flowMeterPort);
 
         Thread t1 = new Thread(screen, "SimScreenDevice");
         Thread t2 = new Thread(valve,  "SimBinaryDevice");
@@ -127,4 +130,7 @@ public final class SimDevices {
             return "ERR 400 unknown-command";
         }
     }
-}
+
+    //static final class SimFlowMeter extends SimDeviceBase {
+
+    }

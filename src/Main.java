@@ -4,6 +4,7 @@
  *
  *
  */
+import devices.FlowMeter;
 import io.bus.DeviceManager;
 import io.bus.DeviceManager.Entry;
 import devices.Screen;
@@ -17,13 +18,15 @@ public class Main {
         List<Entry> table = List.of(
                 new Entry("ui-screen",   "127.0.0.1", 5001, "screen-01", "screen"),
                 new Entry("main-valve",  "127.0.0.1", 5101, "valve-01",  "binary"),
-                new Entry("magnet",      "127.0.0.1", 5301, "mag-01",    "binary")
-                // add: flow-meter, NFC, etc.
+                new Entry("magnet",      "127.0.0.1", 5301, "mag-01",    "binary"),
+                new Entry("flow-meter","127.0.0.1",5401, "meter-01","binary")
+                // add: card reader
         );
 
         try (DeviceManager dm = new DeviceManager(table)) {
             Screen ui = dm.screen("ui-screen");
             BinaryDevice valve = dm.binary("main-valve");
+            //FlowMeter flow = dm.flowMeter("flow-meter");
 
             ui.clear();
             ui.printLine("Welcome");
