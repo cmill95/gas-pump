@@ -17,3 +17,27 @@ SCREEN|UPDATE|BUTTON0|"Turn on"
 SCREEN|DISPLAY|ROW1|"Please pay now"
 
 FLOWMETER|START|ALL|None
+
+
+
+
+
+Screen Specific Info:
+
+- All messages to Screen start with "SCREEN|..."
+- Compound messages can be combined with UNDERSCORE '_'
+- All info should be communicated at the row level
+- "N/A" can be communicated to Screen with '~' character
+- Screen has two modes, "DEFAULT" and "FILL"
+- - When in DEFAULT, and message with the tag "FILL" will change the screen to the FILL mode, and vice versa
+
+
+- Row Communication Format:
+
+- - "SCREEN|DEFAULT|ROW#|LABEL|LEFT|Would you like a Receipt?|size|font_SCREEN|DEFAULT|ROW#|BUTTON|LEFT|ON........." ect
+
+
+
+
+
+
