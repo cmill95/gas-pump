@@ -42,8 +42,8 @@ public class ScreenTesterApp extends Application {
 
         // Connect directly to SimDevices
         // - (commented out for testing purposes)
-//        DeviceLink link = new DeviceLink("127.0.0.1", 5001, "screen-01");
-//        screen = new Screen(link);
+        DeviceLink link = new DeviceLink("127.0.0.1", 5001, "screen-01");
+        screen = new Screen(link);
 
         // Get the monitor size to set scene size
         Rectangle2D screenBounds = javafx.stage.Screen.getPrimary().getVisualBounds();
@@ -81,24 +81,24 @@ public class ScreenTesterApp extends Application {
         // TODO: Add a class which redraws the Screen (may not need)
 
 
-        // Basic Welcome screen displaying functionality
-        StringBuilder strBuilder = new StringBuilder();
-        strBuilder.append("SCREEN|DEFAULT|0|BUTTON|LEFT|OFF");
-        strBuilder.append("_");
-        strBuilder.append("SCREEN|DEFAULT|0|BUTTON|RIGHT|OFF");
-        strBuilder.append("_");
-        strBuilder.append("SCREEN|DEFAULT|0|LABEL|COMBINED|WELCOME!|2|0");
-        strBuilder.append("_");
-        strBuilder.append("SCREEN|DEFAULT|4|BUTTON|LEFT|ON");
-        strBuilder.append("_");
-        strBuilder.append("SCREEN|DEFAULT|4|BUTTON|RIGHT|ON");
-        strBuilder.append("_");
-        strBuilder.append("SCREEN|DEFAULT|4|LABEL|LEFT|YES|1|0");
-        strBuilder.append("_");
-        strBuilder.append("SCREEN|DEFAULT|4|LABEL|RIGHT|NO|1|0");
-
-
-        receive(strBuilder.toString());
+//        // Basic Welcome screen displaying functionality, should be removed eventually
+//        StringBuilder strBuilder = new StringBuilder();
+//        strBuilder.append("SCREEN|DEFAULT|0|BUTTON|LEFT|OFF");
+//        strBuilder.append("_");
+//        strBuilder.append("SCREEN|DEFAULT|0|BUTTON|RIGHT|OFF");
+//        strBuilder.append("_");
+//        strBuilder.append("SCREEN|DEFAULT|0|LABEL|COMBINED|WELCOME!|2|0");
+//        strBuilder.append("_");
+//        strBuilder.append("SCREEN|DEFAULT|4|BUTTON|LEFT|ON");
+//        strBuilder.append("_");
+//        strBuilder.append("SCREEN|DEFAULT|4|BUTTON|RIGHT|ON");
+//        strBuilder.append("_");
+//        strBuilder.append("SCREEN|DEFAULT|4|LABEL|LEFT|YES|1|0");
+//        strBuilder.append("_");
+//        strBuilder.append("SCREEN|DEFAULT|4|LABEL|RIGHT|NO|1|0");
+//
+//
+//        receive(strBuilder.toString());
     }
 
     /**
@@ -165,6 +165,11 @@ public class ScreenTesterApp extends Application {
     }
 
     private void send(String msg) {
+
+        // TODO: Message needs to be sent out to Screen and DeviceLink
+        // - EX) "MAIN|BUTTON|Button#"
+
+        
 
     }
 
@@ -242,10 +247,9 @@ public class ScreenTesterApp extends Application {
 
         if (button.getActive()) {
             button.defaultButtonPressed();
-            System.out.println("Button " + button.getNumber() + " Was Pressed");
+            send("MAIN|BUTTON|" + button.number);
         }
     }
-
 
 
     // Here, the local classes used by ScreenTesterApp are defined
