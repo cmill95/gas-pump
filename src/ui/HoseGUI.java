@@ -18,7 +18,7 @@ import java.time.Duration;
  * - Works now with only the Valve simulator running.
  * - If a Flow device (flow-01 @ 5401) is not running yet, flow controls are disabled.
  */
-public class HoseTesterApp extends Application {
+public class HoseGUI extends Application {
 
     // Ports/IDs match
     private static final String HOST = "127.0.0.1";
