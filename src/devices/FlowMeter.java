@@ -1,11 +1,7 @@
 package devices;
 
 import io.bus.*;
-import java.io.IOException;
-import java.sql.Time;
-import java.util.Base64;
 import java.time.*;
-import java.util.Random;
 import java.util.concurrent.*;
 
 /*Flow Meter Communicator
@@ -14,158 +10,163 @@ import java.util.concurrent.*;
 *          -> Receive Reset Signals from Main
 *          -> Receive Price for selected Fuel from Main
 * */
-public final class FlowMeter implements AutoCloseable {
 
-    //Time Configurations
-    private static final Duration TIMEOUT = Duration.ofSeconds(30);  //Timeout
-    private static final long TICK = 100L; // 10 Hz
 
-    //IO Connection
+/* CONTROLLER USAGE
+* FlowMeter fm = new FlowMeter(DeviceLink)
+* fm.setPricePerGal (x.xxf) // Must be Float
+* fm.start()
+*
+* While (CONTROLLER RUNNING)
+* fm.loop();
+* FlowMeter.State state = fm.,getState
+*   -> USE to update ui
+*
+* */
+
+
+public final class FlowMeter{
+    //Inner State class for recording
+    public static final class State {
+        public final boolean running;
+        public final boolean paused;
+        public final double gallons;
+        public final double price;
+        public final double currGPM;
+        public final Duration elapsed;
+
+        State(boolean running, boolean paused, double gallons, double price,
+              double currGPM,Duration elapsed) {
+            this.running = running;
+            this.paused = paused;
+            this.gallons = gallons;
+            this.price = price;
+            this.currGPM = currGPM;
+            this.elapsed = elapsed;
+        }
+
+        @Override
+        public String toString() {
+            long s = elapsed.toSeconds();
+            return String.format("time=%ds  gallons=%.3f  price=$%.2f  rate=%.3f gpm  Run/Stop:Paused=>[%s:%s]",
+                    s, gallons, price, currGPM,
+                    running ? "RUN" : "STOP",
+                    paused ? "/PAUSE" : "");
+        }
+    }
+
+    //IO
     private final DeviceLink link;
-
-    //Sim and Counting Fields
-    private final ScheduledExecutorService exec; //Single Thread Executor for Tick Cadence in Background
-    private ScheduledFuture<?> ticker; //Handles getting info from thread without blocking
-    private final Random rng = new Random(); //For Randomizing Flow Rates, for testing
-
-    private volatile boolean running = false;
-    private volatile boolean paused = false;
-
-    private volatile float pricePerGallon = 2.79f; //Hypothetical Price, Will be set by main Later
-    private volatile float runningGallons = 0.0f;
-    private volatile float runningPrice = 0.0f;
-    private volatile float currentRateGPM = 0.0f; //Random Gallons-per-Minutes within reason
-
-    private Instant startedAt = null;
-    private Instant lastTickAt = null;
+    //States, Config
+    private boolean running = false;
+    private boolean paused = false;
+    private float pricePerGal = 0.0f;
+    //Accumulators
+    private double runningGals = 0.0;
+    private double runningPrice = 0.0;
+    private double currGPM = 8.5;
+    //Timing Control
+    private long startNan = 0L;
+    private long lastNan = 0L;
+    //test helper
+    private boolean useDeviceRate = true;
 
     //Constructor
     public FlowMeter(DeviceLink link) {
         this.link = link;
-
-        //implement thread interface in constructor
-        this.exec = Executors.newSingleThreadScheduledExecutor(r -> {
-            Thread t = new Thread(r, "FM_Ticker");
-            t.setDaemon(true); //set Daemon Thread for Running and Background
-            return t;
-        });
     }
 
-    //Methods For FlowMeter Controls
-    public synchronized void start() throws IOException {
-        if (running) return; //Double Start Guard
+    //Setters
+    //Price Setter, 0.1 if not set
+    public void setPricePerGal(float dollars) {this.pricePerGal = Math.max(0.1f, dollars);}
+    public void setCurrGPM(double rate) {
+        this.useDeviceRate = false;
+        this.currGPM = Math.abs(rate); //Assume all pos
+    }
+    public void useDeviceRate () {this.useDeviceRate = true;}
 
-        ensureOpen();  //Checks DeviceLink is usable
-        requestQuietly("FLOW_START"); // Command, sim may ignore
-
+    public void Start() {
+        if (running) return;
         running = true;
         paused = false;
-        startedAt = Instant.now();
-        lastTickAt = startedAt;
-        currentRateGPM = nextSimRateGPM(); //Seed an init GPM rate
+        runningGals = 0.0;
+        runningPrice = 0.0;
 
-        //Schedules periodic task
-        ticker = exec.scheduleAtFixedRate(this::safeTick, 0L,
-                TICK, TimeUnit.MILLISECONDS);
+        startNan = System.nanoTime();
+        lastNan = startNan;
+        //Send Starting Message
+        try {send("Meter:start"); } catch (Exception ignored) {}
+        if (useDeviceRate) {currGPM = tryReadRate(currGPM);}
     }
 
-    public synchronized void stop() throws IOException {
-        if (!running) return; //Double Stop Guard
-
-        tickOnce(); //Cover missed time between flag switch
-        requestQuietly("FLOW_STOP"); // Command, sim may ignore
-
-        //Stop Couniting and Ticker
-        running = false;
-        paused = false;
-        if (ticker != null) {
-            ticker.cancel(false);
-            ticker = null;
-        }
-    }
-
-    public synchronized void pause() throws IOException {
-        if (!running || paused ) return;
-        requestQuietly ("FLOW_PAUSE");
-        paused = true;
-    }
-
-    public synchronized void resume() throws IOException {
+    public void resume() {
         if (!running || !paused) return;
-        requestQuietly ("FLOW_RESUME");
         paused = false;
-        lastTickAt = Instant.now();
+        lastNan = System.nanoTime();
+        try {send("METER:RESUME"); } catch (Exception ignored) {}
     }
 
-    @Override
-    public synchronized void close() throws IOException {
-        stop();
-        exec.shutdown(); //Stop executors
-    }
-
-    //Methods for internals of contols
-    private void safeTick() {
-        try {tickOnce();} catch (Throwable t) {}
-    }
-
-    private void tickOnce() {
+    public void pause() {
         if (!running || paused) return;
-
-        //Compute Elapsed Time and Update lastTick
-        final Instant now = Instant.now();
-        final Instant last = (lastTickAt == null ?  now : lastTickAt);
-        final double dtSec = Math.max(0.0, (now.toEpochMilli() - last.toEpochMilli()) /  1000.0);
-            //use Epoch so dtSec is never negative, safe guard
-        lastTickAt = now;
-
-        //Change GPM and Calculate
-        currentRateGPM = clamp((float) (currentRateGPM + (rng.nextFloat() * 0.15)), 5.5F, 10.5F);
-        final float gallonsAdded = (float) ((currentRateGPM /60.0) * dtSec);
-
-        runningGallons += gallonsAdded;
-        recalcPrice();
+        paused = true;
+        try {send("METER:PAUSE"); } catch (Exception ignored) {}
     }
 
-    private void recalcPrice() {runningPrice = runningGallons * pricePerGallon;}
-
-    private float nextSimRateGPM() {
-        return (float) (6.0 + rng.nextFloat() * 4.0);
+    public void stop() {
+        if (!running) return;
+        running = false;
+        try {send("METER:STOP"); } catch (Exception ignored) {}
     }
 
-    //Keeps Random Values within reasonable range
-    private static float clamp(float v, float lo, float hi) {
-        return Math.max(lo, Math.min(hi, v));
-    }
+    //controller should call this, should get time difference between calls
+    //Computes Price and other info
+    public void loop(){
+        final long now = System.nanoTime();
+        final long prev = lastNan == 0L ? now : lastNan;
+        lastNan = now;
 
-    private void ensureOpen() throws IOException {
-        if (!link.isOpen()) throw new IOException("Link not Open");
-        requestQuietly("PING");
-    }
+        //Look For Next Rate when Stopped
+        if(!running||paused){
+            if (useDeviceRate) currGPM = tryReadRate(currGPM);
+            return;
+        }
 
-    //Method for Requesting from Device Link
-    private void requestQuietly(String line) {
-        try {
-            link.request(line, TIMEOUT);
-        } catch (Throwable ignored) {
-            //Sim should implement
+        //refresh rate
+        if (useDeviceRate) currGPM = tryReadRate(currGPM);
+
+        //Use Loop Mechanism
+        final double deltaSec = (now-prev)/1_000_000_000.0;
+        //ensure time change is not neg
+        if (deltaSec > 0){
+            final double deltaGal = currGPM*(deltaSec/60);
+            runningGals += deltaGal;
+            runningPrice += deltaGal*pricePerGal;
         }
     }
 
-    //Setter Getters and Send Info Methods
-    public synchronized String sendInfo() {
-        long elapsed = startedAt == null ? 0 : Duration.between(startedAt,Instant.now()).getSeconds();
-        return String.format(
-                "OK FLOW running=%d paused=%d GPM=%.2f gallons=%.3f price=%.2f deltaSec=%d",
-                running ? 0:1, paused ? 0:1, currentRateGPM, runningGallons, pricePerGallon, elapsed
-        );
+    public State getState() {
+        //Timing
+        final long ref = startNan == 0L ? System.nanoTime() : startNan;
+        final long end = (running ? System.nanoTime() : lastNan);
+        final Duration elapsed = (end >= ref) ? Duration.ofNanos(end - ref) : Duration.ZERO;
+        return new  State(running, paused, runningGals, runningPrice, currGPM,  elapsed);
     }
 
-    public synchronized void setPrice(float price) {this.pricePerGallon = price;}
-    public synchronized float getRunningAmount() { return (float) runningGallons; }
-    public synchronized float getRunningTotal() { return (float) runningPrice; }
-    public synchronized void resetRunningTotal() { this.runningPrice = 0.0F; }
-    public synchronized void resetRunningAmount() { this.runningGallons = 0.0F; }
-    public synchronized boolean isRunning() { return running; }
-    public synchronized boolean isPaused() { return paused; }
+    // Communication Helpers
+    private double tryReadRate(double ignore) {
+        try {
+            final String reply = send("METER:RATE?");
+            final String s = reply.contains(":") ?
+                    reply.substring(reply.indexOf(':') + 1) : reply;
+            return Math.abs(Double.parseDouble(s.trim()));
+        } catch (Exception e){
+            return ignore;
+        }
+    }
+
+    private String send(String cmd) throws Exception {
+        if (link == null) { return "";}
+        return link.request(cmd,Duration.ofSeconds(7));
+    }
 
 }
