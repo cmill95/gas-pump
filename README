@@ -14,3 +14,10 @@ Description:
 
 Info:
 - Project uses Zulu 21 sdk
+
+For HoseGUI:
+
+mkdir out
+javac -d out src/io/bus/*.java src/devices/*.java src/sim/*.java src/Main.java
+
+java -cp out sim.SimDevices

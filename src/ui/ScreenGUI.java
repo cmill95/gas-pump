@@ -24,7 +24,7 @@ import io.bus.DeviceLink;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public class ScreenTesterApp extends Application {
+public class ScreenGUI extends Application {
     private Screen screen;
 
     private double SCENE_WIDTH;

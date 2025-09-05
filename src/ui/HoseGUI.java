@@ -1,131 +1,111 @@
 package ui;
 
 import devices.BinaryDevice;
-import io.bus.DeviceLink;
+import io.bus.DeviceManager;
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.geometry.Insets;
+import javafx.scene.Cursor;
 import javafx.scene.Scene;
-import javafx.scene.control.*;
-import javafx.scene.layout.HBox;
+import javafx.scene.control.Label;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
+import java.util.List;
+import java.util.Objects;
 
-import java.io.IOException;
-import java.time.Duration;
-
-/**
- * Hose tester: lets you open/close the main valve and (optionally) talk to a flow meter.
- * - Works now with only the Valve simulator running.
- * - If a Flow device (flow-01 @ 5401) is not running yet, flow controls are disabled.
- */
 public class HoseGUI extends Application {
 
-    // Ports/IDs match
     private static final String HOST = "127.0.0.1";
-    private static final int    VALVE_PORT = 5101;   // SimBinaryDevice (valve-01)
-    private static final String VALVE_ID   = "valve-01";
+    private static final int    HOSE_PORT = 5101;
+    private static final String HOSE_ID = "hose-01";
+    private static final String HOSE_NAME = "hose-sensor";
 
-    private static final int    FLOW_PORT  = 5401;   // SimFlowDevice (flow-01), IF present later
-    private static final String FLOW_ID    = "flow-01";
+    private DeviceManager dm;
+    private BinaryDevice hose;
 
-    private static final double TICKS_PER_GALLON = 500.0; // demo calibration
-
-    private BinaryDevice valve;          // required (we control it)
-    private DeviceLink   flowLink = null; // optional (we try to connect; may be null)
+    private boolean attached = false; // start DETACHED
+    private ImageView image;
+    private Label status;
 
     @Override
     public void start(Stage stage) throws Exception {
-        Label status = new Label("Starting...");
-        Label reading = new Label("Flow: n/a");
 
-        // ----- Connect to valve (required) -----
-        try {
-            DeviceLink valveLink = new DeviceLink(HOST, VALVE_PORT, VALVE_ID);
-            valve = new BinaryDevice(valveLink);
-            status.setText("Valve connected.");
-        } catch (IOException ex) {
-            status.setText("ERROR: Could not connect to valve @ " + HOST + ":" + VALVE_PORT + " (" + ex.getMessage() + ")");
-        }
-
-        // ----- Try to connect to flow meter (optional) -----
-        try {
-            flowLink = new DeviceLink(HOST, FLOW_PORT, FLOW_ID);
-            status.setText(status.getText() + "  Flow connected.");
-        } catch (IOException ex) {
-            flowLink = null; // not available yet
-            status.setText(status.getText() + "  (Flow device not connected; controls disabled.)");
-        }
-
-        // ----- UI controls -----
-        ToggleButton toggleValve = new ToggleButton("Valve: CLOSED");
-        toggleValve.setDisable(valve == null);
-        toggleValve.setOnAction(e -> {
-            if (valve == null) return;
-            try {
-                boolean open = toggleValve.isSelected();
-                valve.set(open);
-                toggleValve.setText(open ? "Valve: OPEN" : "Valve: CLOSED");
-                status.setText("Valve " + (open ? "OPEN" : "CLOSED"));
-            } catch (Exception ex) {
-                status.setText("Valve ERR: " + ex.getMessage());
-                toggleValve.setSelected(false);
-                toggleValve.setText("Valve: CLOSED");
-            }
-        });
-
-        Button flowReset = new Button("Flow: Reset");
-        Button flowTick  = new Button("Flow: +100 ticks");
-        Button flowRead  = new Button("Flow: Read");
-        flowReset.setDisable(flowLink == null);
-        flowTick.setDisable(flowLink == null);
-        flowRead.setDisable(flowLink == null);
-
-        flowReset.setOnAction(e -> {
-            try { expectOk(flowLink.request("RESET", Duration.ofMillis(500)));
-                reading.setText("Flow: 0 ticks (0.000 gal)");
-                status.setText("Flow reset OK");
-            } catch (Exception ex) { status.setText("Flow ERR: " + ex.getMessage()); }
-        });
-
-        flowTick.setOnAction(e -> {
-            try { expectOk(flowLink.request("TICK 100", Duration.ofMillis(500)));
-                status.setText("Added 100 ticks");
-            } catch (Exception ex) { status.setText("Flow ERR: " + ex.getMessage()); }
-        });
-
-        flowRead.setOnAction(e -> {
-            try {
-                String r = flowLink.request("GET", Duration.ofMillis(500));
-                long ticks = parseOkLong(r);
-                double gallons = ticks / TICKS_PER_GALLON;
-                reading.setText(String.format("Flow: %d ticks (%.3f gal)", ticks, gallons));
-                status.setText("Flow read OK");
-            } catch (Exception ex) { status.setText("Flow ERR: " + ex.getMessage()); }
-        });
-
-        VBox root = new VBox(10,
-                new Label("Hose Tester"),
-                toggleValve,
-                new HBox(10, flowReset, flowTick, flowRead),
-                reading,
-                status
+        var entries = List.of(
+                new DeviceManager.Entry(HOSE_NAME, HOST, HOSE_PORT, HOSE_ID, "binary")
         );
-        root.setPadding(new Insets(12));
+        dm = new DeviceManager(entries);
+        hose = dm.binary(HOSE_NAME);
 
-        stage.setTitle("Hose Tester");
-        stage.setScene(new Scene(root, 460, 220));
+        Image imgDetached = new Image(
+                Objects.requireNonNull(HoseGUI.class.getResource("/images/hose_detached.png"))
+                        .toExternalForm());
+
+        Image imgAttached = new Image(
+                Objects.requireNonNull(HoseGUI.class.getResource("/images/hose_attached.png"))
+                        .toExternalForm());
+
+        image = new ImageView(imgDetached);
+        image.setFitWidth(240);
+        image.setPreserveRatio(true);
+        image.setCursor(Cursor.HAND);
+
+        status = new Label("Hose: DETACHED");
+        status.setStyle("-fx-font-size: 16px;");
+
+        image.setOnMouseClicked(e -> toggle(imgDetached, imgAttached));
+
+        // Push initial state to sim
+        setSimState(attached);
+
+        // Optional: keep UI synced if something else toggles the sim
+        Thread poll = new Thread(this::pollLoop, "hose-poll");
+        poll.setDaemon(true);
+        poll.start();
+
+        VBox root = new VBox(12, image, status);
+        root.setPadding(new Insets(12));
+        stage.setTitle("Hose Simulator");
+        stage.setScene(new Scene(root, 280, 320));
         stage.show();
     }
 
-    private static void expectOk(String resp) throws IOException {
-        if (resp == null || !resp.startsWith("OK"))
-            throw new IOException("Bad response: " + resp);
+    private void toggle(Image imgDetached, Image imgAttached) {
+        attached = !attached;
+        setSimState(attached);
+        image.setImage(attached ? imgAttached : imgDetached);
+        status.setText(attached ? "Hose: ATTACHED" : "Hose: DETACHED");
     }
-    private static long parseOkLong(String r) throws IOException {
-        if (r == null || !r.startsWith("OK"))
-            throw new IOException("Bad response: " + r);
-        String[] parts = r.split("\\s+");
-        return Long.parseLong(parts[parts.length - 1]);
+
+    private void setSimState(boolean isAttached) {
+        try {
+            hose.set(isAttached); // sends SET 1/0 over DeviceLink → SimDevices
+        } catch (Exception ex) {
+            status.setText("ERROR sending state: " + ex.getMessage());
+        }
+    }
+
+    private void pollLoop() {
+        try {
+            while (true) {
+                boolean s = hose.get(); // GET → OK 0|1
+                if (s != attached) {
+                    attached = s;
+                    Platform.runLater(() -> {
+                        status.setText(attached ? "Hose: ATTACHED" : "Hose: DETACHED");
+                    });
+                }
+                Thread.sleep(200); // 5 Hz
+            }
+        } catch (Exception ignored) {
+            // exit on error/close
+        }
+    }
+
+    @Override
+    public void stop() throws Exception {
+        if (dm != null) dm.close();
     }
 
     public static void main(String[] args) { launch(args); }

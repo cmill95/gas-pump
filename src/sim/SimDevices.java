@@ -9,24 +9,24 @@ public final class SimDevices {
 
     public static void main(String[] args) throws Exception {
         int screenPort = 5001;
-        int binaryPort = 5101;
+        int hosePort = 5101;
         int flowMeterPort = 5201;
 
         // Allow overriding ports via args if needed
         if (args.length >= 1) screenPort = Integer.parseInt(args[0]);
-        if (args.length >= 2) binaryPort = Integer.parseInt(args[1]);
+        if (args.length >= 2) hosePort = Integer.parseInt(args[1]);
         if (args.length >= 2) flowMeterPort = Integer.parseInt(args[2]);
 
         SimScreenDevice screen = new SimScreenDevice("screen-01", screenPort);
-        SimBinaryDevice valve  = new SimBinaryDevice("valve-01", binaryPort);
+        SimHoseDevice valve  = new SimHoseDevice("hose-01", hosePort);
         //SimFlowMeter flowmeter = new SimFlowMeter("meter-01", flowMeterPort);
 
         Thread t1 = new Thread(screen, "SimScreenDevice");
-        Thread t2 = new Thread(valve,  "SimBinaryDevice");
+        Thread t2 = new Thread(valve,  "SimHoseDevice");
         t1.start();
         t2.start();
 
-        System.out.println("[sim] Started. Screen @" + screenPort + " deviceId=screen-01, Binary @" + binaryPort + " deviceId=valve-01");
+        System.out.println("[sim] Started. Screen @" + screenPort + " deviceId=screen-01, Hose @" + hosePort + " deviceId=hose-01");
         System.out.println("[sim] Press Ctrl+C to stop.");
 
         t1.join();
@@ -110,10 +110,10 @@ public final class SimDevices {
     }
 
     // --- Binary device: supports GET and SET 0/1 ---
-    static final class SimBinaryDevice extends SimDeviceBase {
+    static final class SimHoseDevice extends SimDeviceBase {
         private boolean state = false;
 
-        SimBinaryDevice(String deviceId, int port) { super(deviceId, port); }
+        SimHoseDevice(String deviceId, int port) { super(deviceId, port); }
 
         @Override
         protected String handle(String line) {
