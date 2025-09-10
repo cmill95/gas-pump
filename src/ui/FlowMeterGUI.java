@@ -83,7 +83,7 @@ public class FlowMeterGUI extends Application {
         }
 
 
-        pane.getChildren().addAll(images.get(2), rect, text);
+        pane.getChildren().addAll(images.get(2), text);
         pane.setPrefSize(SCENE_WIDTH, SCENE_HEIGHT);
         pane.setMaxSize(SCENE_WIDTH, SCENE_HEIGHT);
         pane.setAlignment(Pos.TOP_CENTER);
