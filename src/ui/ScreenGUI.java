@@ -17,7 +17,6 @@ import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.stage.Stage;
-
 import devices.Screen;
 import io.bus.DeviceLink;
 
@@ -38,7 +37,6 @@ public class ScreenGUI extends Application {
 
     @Override
     public void start(Stage stage) throws Exception {
-
 
         // Connect directly to SimDevices
         // - (commented out for testing purposes)
@@ -83,24 +81,23 @@ public class ScreenGUI extends Application {
         // TODO: Add a class which redraws the Screen (may not need)
 
 
-//        // Basic Welcome screen displaying functionality, should be removed eventually
-//        StringBuilder strBuilder = new StringBuilder();
-//        strBuilder.append("SCREEN|DEFAULT|0|BUTTON|LEFT|OFF");
-//        strBuilder.append("_");
-//        strBuilder.append("SCREEN|DEFAULT|0|BUTTON|RIGHT|OFF");
-//        strBuilder.append("_");
-//        strBuilder.append("SCREEN|DEFAULT|0|LABEL|COMBINED|WELCOME!|2|0");
-//        strBuilder.append("_");
-//        strBuilder.append("SCREEN|DEFAULT|4|BUTTON|LEFT|ON");
-//        strBuilder.append("_");
-//        strBuilder.append("SCREEN|DEFAULT|4|BUTTON|RIGHT|ON");
-//        strBuilder.append("_");
-//        strBuilder.append("SCREEN|DEFAULT|4|LABEL|LEFT|YES|1|0");
-//        strBuilder.append("_");
-//        strBuilder.append("SCREEN|DEFAULT|4|LABEL|RIGHT|NO|1|0");
-//
-//
-//        receive(strBuilder.toString());
+        // Basic Welcome screen displaying functionality, should be removed eventually
+        StringBuilder strBuilder = new StringBuilder();
+        strBuilder.append("SCREEN|DEFAULT|0|BUTTON|LEFT|OFF");
+        strBuilder.append("_");
+        strBuilder.append("SCREEN|DEFAULT|0|BUTTON|RIGHT|OFF");
+        strBuilder.append("_");
+        strBuilder.append("SCREEN|DEFAULT|0|LABEL|COMBINED|WELCOME!|2|0");
+        strBuilder.append("_");
+        strBuilder.append("SCREEN|DEFAULT|4|BUTTON|LEFT|ON");
+        strBuilder.append("_");
+        strBuilder.append("SCREEN|DEFAULT|4|BUTTON|RIGHT|ON");
+        strBuilder.append("_");
+        strBuilder.append("SCREEN|DEFAULT|4|LABEL|LEFT|YES|1|0");
+        strBuilder.append("_");
+        strBuilder.append("SCREEN|DEFAULT|4|LABEL|RIGHT|NO|1|0");
+
+        receive(strBuilder.toString());
     }
 
     /**
@@ -215,7 +212,6 @@ public class ScreenGUI extends Application {
 
                 // This assumes buttons are squares
                 DefaultButton button = new DefaultButton(counter, rowHeight, defaultFont);
-                button.setActive(true);
                 button.setOnMouseClicked(e -> {
                     defaultButtonPressed(button);
                 });
@@ -256,8 +252,11 @@ public class ScreenGUI extends Application {
      */
     private void defaultButtonPressed(DefaultButton button)
     {
-        button.defaultButtonPressed();
-        send("MAIN|BUTTON " + button.getNumber());
+        if (button.active) {
+            button.defaultButtonPressed();
+            send("MAIN|BUTTON " + button.getNumber());
+            System.out.println("Button: " + button.number);
+        }
     }
 
 
