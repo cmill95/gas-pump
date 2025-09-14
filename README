@@ -15,9 +15,19 @@ Description:
 Info:
 - Project uses Zulu 21 sdk
 
-For HoseGUI:
+To Run Program:
+
+*make sure you are in the gas-pump directory*
+
+in one terminal:
 
 mkdir out
 javac -d out src/io/bus/*.java src/devices/*.java src/sim/*.java src/Main.java
-
 java -cp out sim.SimDevices
+
+then, in another terminal:
+
+javac -d out src/io/bus/*.java src/devices/*.java src/sim/*.java src/Main.java
+java -cp out Main
+
+then, run GUI
