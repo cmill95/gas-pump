@@ -46,7 +46,7 @@ public class FlowMeterGUI extends Application {
 //        flowing = fm.getState().running;
 //        volume = fm.getState().gallons;
 
-        flowing = false;
+        flowing = true;
         volume = 10.17;
 
 
