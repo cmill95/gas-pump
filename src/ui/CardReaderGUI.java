@@ -35,7 +35,7 @@ public class CardReaderGUI extends Application {
 
         Label status = new Label("Tap to send a random single digit (0-9)");
 
-        Image cardImage = new Image(getClass().getResourceAsStream("/tap_to_pay.png"));
+        Image cardImage = new Image(getClass().getResourceAsStream("/images/hose_detached.png"));
         ImageView cardView = new ImageView(cardImage);
         cardView.setFitWidth(120);
         cardView.setFitHeight(120);

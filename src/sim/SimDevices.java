@@ -7,18 +7,23 @@ import java.nio.charset.StandardCharsets;
 import java.util.Random;
 
 public final class SimDevices {
+
+    static volatile String screenState = "WELCOME";
     public static void main(String[] args) throws Exception {
         int screenPort      = 5001;
+        int screenCtrlPort  = 5021;
         int cardReaderPort  = 5201;
-        int cardReaderCtl   = 5221;   // control port for GUI
+        int cardReaderCtl   = 5221;
         int cardServerPort  = 5301;
 
         System.out.println("[sim] Started. Screen @" + screenPort +
+                ", Screen-CTRL @" + screenCtrlPort +
                 ", CardReader @" + cardReaderPort +
                 ", CardServer @" + cardServerPort +
                 ", CardReader-CTRL @" + cardReaderCtl);
 
         new Thread(() -> new ScreenServer("screen-01", screenPort).serve()).start();
+        new Thread(() -> new ScreenControlServer("screen-ctrl", screenCtrlPort).serve()).start();
         new Thread(() -> new CardReaderServer("cardr-01", cardReaderPort).serve()).start();
         new Thread(() -> new CardReaderControlServer("cardr-ctrl", cardReaderCtl).serve()).start();
         new Thread(() -> new CardServer("cards-01", cardServerPort).serve()).start();
@@ -65,7 +70,27 @@ public final class SimDevices {
             if (line.equals("SCREEN|STATUS|READY|None")) {
                 return "MAIN|REPLY|SCREEN|\"ALLOWPAYMENT\"";
             }
-            System.out.println("[sim] SCREEN <= " + line);
+            if (line.startsWith("SCREEN|DISPLAY|MAIN|")) {
+                int q1 = line.indexOf('"');
+                int q2 = line.lastIndexOf('"');
+                String state = (q1 >= 0 && q2 > q1) ? line.substring(q1 + 1, q2) : "";
+                screenState = state; // <-- store the code-word state
+                System.out.println("[sim] SCREEN state -> " + screenState);
+                return "MAIN|REPLY|SCREEN|\"OK\"";
+            }
+            return "MAIN|REPLY|SCREEN|\"OK\"";
+        }
+    }
+
+    // ─────────────── Screen Control (GUI) ───────────────
+    static final class ScreenControlServer extends SimServer {
+        ScreenControlServer(String id, int port) { super(id, port); }
+        @Override String deviceName() { return "SCREEN-CTRL"; }
+        @Override String handle(String line) {
+            // GUI polls current state
+            if (line.equals("SCREEN|GET|STATE|None")) {
+                return "MAIN|REPLY|SCREEN|\"STATE:" + screenState + "\"";
+            }
             return "MAIN|REPLY|SCREEN|\"OK\"";
         }
     }
