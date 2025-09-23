@@ -19,7 +19,6 @@ import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Text;
 import javafx.stage.Stage;
 import javafx.util.Duration;
-
 import javax.swing.text.Position;
 import java.time.temporal.Temporal;
 import java.util.ArrayList;
