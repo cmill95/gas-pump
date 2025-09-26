@@ -12,6 +12,8 @@ import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
+
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -29,6 +31,12 @@ public class HoseGUI extends Application {
     private ImageView image;
     private Label status;
 
+    private List<Image> connectedImages;
+    private List<Image> disconnectedImages;
+    private boolean tankFull;
+    private double tankSize;
+    private double currentTankFill;
+
     @Override
     public void start(Stage stage) throws Exception {
 
@@ -38,15 +46,20 @@ public class HoseGUI extends Application {
         dm = new DeviceManager(entries);
         hose = dm.binary(HOSE_NAME);
 
-        Image imgDetached = new Image(
-                Objects.requireNonNull(HoseGUI.class.getResource("/images/hose_detached.png"))
-                        .toExternalForm());
 
-        Image imgAttached = new Image(
-                Objects.requireNonNull(HoseGUI.class.getResource("/images/hose_attached.png"))
-                        .toExternalForm());
+        // Load all images
+        connectedImages = new ArrayList<>();
+        disconnectedImages = new ArrayList<>();
+        loadImages();
+//        Image imgDetached = new Image(
+//                Objects.requireNonNull(HoseGUI.class.getResource("/images/hose_detached.png"))
+//                        .toExternalForm());
+//
+//        Image imgAttached = new Image(
+//                Objects.requireNonNull(HoseGUI.class.getResource("/images/hose_attached.png"))
+//                        .toExternalForm());
 
-        image = new ImageView(imgDetached);
+        image = new ImageView(disconnectedImages.get(0));
         image.setFitWidth(240);
         image.setPreserveRatio(true);
         image.setCursor(Cursor.HAND);
@@ -54,7 +67,7 @@ public class HoseGUI extends Application {
         status = new Label("Hose: DETACHED");
         status.setStyle("-fx-font-size: 16px;");
 
-        image.setOnMouseClicked(e -> toggle(imgDetached, imgAttached));
+        image.setOnMouseClicked(e -> toggle());
 
         // Push initial state to sim
         setSimState(attached);
@@ -71,10 +84,32 @@ public class HoseGUI extends Application {
         stage.show();
     }
 
-    private void toggle(Image imgDetached, Image imgAttached) {
+    @Override
+    public void stop() throws Exception {
+        if (dm != null) dm.close();
+    }
+
+
+    // Old toggle() function
+//    private void toggle(Image imgDetached, Image imgAttached) {
+//        attached = !attached;
+//        setSimState(attached);
+//        image.setImage(attached ? imgAttached : imgDetached);
+//        status.setText(attached ? "Hose: ATTACHED" : "Hose: DETACHED");
+//    }
+
+
+    // New toggle() function
+    private void toggle() {
+
+        // Gets the index of the image in one of the two arrays
+        int index = attached ? connectedImages.indexOf(
+                image.getImage()) : disconnectedImages.indexOf(image.getImage());
+
+        // Switches state, image and text
         attached = !attached;
         setSimState(attached);
-        image.setImage(attached ? imgAttached : imgDetached);
+        image.setImage(attached ? connectedImages.get(index) : disconnectedImages.get(index));
         status.setText(attached ? "Hose: ATTACHED" : "Hose: DETACHED");
     }
 
@@ -103,10 +138,28 @@ public class HoseGUI extends Application {
         }
     }
 
-    @Override
-    public void stop() throws Exception {
-        if (dm != null) dm.close();
+    // This method loads the 22 images used for the gass nozzle
+    private void loadImages() {
+
+        for (int i=0; i<=10; i++) {
+            String imageName = "GN-D-" + i;
+            Image image = new Image(
+                Objects.requireNonNull(HoseGUI.class.getResource("/images/fuelNozzle/" + imageName))
+                        .toExternalForm());
+            disconnectedImages.add(image);
+        }
+
+        for (int i=0; i<=10; i++) {
+            String imageName = "GN-C-" + i;
+            Image image = new Image(
+                    Objects.requireNonNull(HoseGUI.class.getResource("/images/fuelNozzle/" + imageName))
+                            .toExternalForm());
+
+            connectedImages.add(image);
+        }
     }
+
+
 
     public static void main(String[] args) { launch(args); }
 }
