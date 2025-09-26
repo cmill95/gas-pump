@@ -1,82 +1,118 @@
 package ui;
 
+import io.bus.DeviceManager;
+import io.bus.DeviceLink;
+import javafx.animation.KeyFrame;
+import javafx.animation.PauseTransition;
+import javafx.animation.ScaleTransition;
+import javafx.animation.Timeline;
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
-import javafx.scene.layout.VBox;
-import javafx.stage.Stage;
-
-import io.bus.DeviceManager;
-import io.bus.DeviceLink;
-
-import javafx.util.Duration;
-import java.util.List;
-import java.util.concurrent.ThreadLocalRandom;
-import javafx.animation.ScaleTransition;
-
-import javafx.geometry.Pos;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.layout.VBox;
+import javafx.stage.Stage;
+import javafx.util.Duration;
+
+import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class CardReaderGUI extends Application {
     private DeviceManager dm;
     private DeviceLink reader;
 
+    private Image imgIdle0, imgIdle1, imgAccepted, imgDeclined;
+    private ImageView cardView;
+
+    private Timeline idleFlash;
+    private boolean flip;
+
     @Override
     public void start(Stage stage) throws Exception {
-        // connect only to the control server
+
         var entries = List.of(
                 new DeviceManager.Entry("cardreader-ctrl", "127.0.0.1", 5221, "cardr-ctrl", "cardreader")
         );
         dm = new DeviceManager(entries);
         reader = dm.link("cardreader-ctrl");
 
-        Label status = new Label("Tap to send a random single digit (0-9)");
+        imgIdle0   = new Image(getClass().getResourceAsStream("/images/CR-0.png"));
+        imgIdle1   = new Image(getClass().getResourceAsStream("/images/CR-1.png"));
+        imgAccepted= new Image(getClass().getResourceAsStream("/images/CR-2.png"));
+        imgDeclined= new Image(getClass().getResourceAsStream("/images/CR-3.png"));
 
-        Image cardImage = new Image(getClass().getResourceAsStream("/images/hose_detached.png"));
-        ImageView cardView = new ImageView(cardImage);
-        cardView.setFitWidth(120);
-        cardView.setFitHeight(120);
+        cardView = new ImageView(imgIdle0);
         cardView.setPreserveRatio(true);
+        cardView.setFitWidth(260);
 
-        Button tap = new Button();
-        tap.setGraphic(cardView);
-
-        tap.setStyle("-fx-background-color: transparent;"); // invisible background
-
+        Label status = new Label("Ready. Tap to send a random digit (0–9).");
+        Button tap = new Button("Tap Card");
 
         tap.setOnAction(ev -> {
             int d = ThreadLocalRandom.current().nextInt(10);
+
             String ok;
             try {
-                ok = reader.request("CARDREADER|DEVCTL|TAP|" + d, java.time.Duration.ofSeconds(1));
+                ok = reader.request("CARDREADER|DEVCTL|MAIN|" + d, java.time.Duration.ofSeconds(1));
             } catch (Exception e) {
                 ok = "NO REPLY";
             }
-            status.setText("Queued tap: " + d + " (server replied: " + ok + ")");
+
             ScaleTransition st = new ScaleTransition(Duration.millis(150), cardView);
-            st.setFromX(1.0);
-            st.setFromY(1.0);
-            st.setToX(0.9);
-            st.setToY(0.9);
+            st.setFromX(1.0); st.setFromY(1.0);
+            st.setToX(0.9);   st.setToY(0.9);
             st.setAutoReverse(true);
             st.setCycleCount(2);
             st.play();
+
+            stopIdle();
+            boolean accepted = (d % 2 == 0);
+            cardView.setImage(accepted ? imgAccepted : imgDeclined);
+            status.setText("Queued tap: " + d + " (server replied: " + ok + ")"
+                    + (accepted ? "  → authorized" : "  → declined"));
+
+            PauseTransition back = new PauseTransition(Duration.millis(1200));
+            back.setOnFinished(e -> {
+                cardView.setImage(imgIdle0);
+                status.setText("Ready. Tap to send a random digit (0–9).");
+                startIdle();
+            });
+            back.play();
         });
 
-        VBox root = new VBox(15, status, tap);
+        VBox root = new VBox(12, cardView, status, tap);
+        root.setPadding(new Insets(16));
         root.setAlignment(Pos.CENTER);
-        root.setPadding(new Insets(20));
 
-        root.setStyle("-fx-background-color: #2c3e50;"); // dark blue-gray
-        status.setStyle("-fx-text-fill: white; -fx-font-size: 14px;"); // make label visible
-
-        Scene scene = new Scene(root, 400, 300);
-        stage.setTitle("Card Reader GUI");
-        stage.setScene(scene);
+        stage.setTitle("Card Reader");
+        stage.setScene(new Scene(root, 320, 380));
+        stage.setOnCloseRequest(e -> {
+            try { if (dm != null) dm.close(); } catch (Exception ignore) {}
+            Platform.exit();
+        });
         stage.show();
+
+        startIdle();
+    }
+
+    private void startIdle() {
+        if (idleFlash != null) idleFlash.stop();
+        flip = false;
+        idleFlash = new Timeline(new KeyFrame(Duration.millis(500), e -> {
+            flip = !flip;
+            cardView.setImage(flip ? imgIdle1 : imgIdle0);
+        }));
+        idleFlash.setCycleCount(Timeline.INDEFINITE);
+        idleFlash.play();
+    }
+
+    private void stopIdle() {
+        if (idleFlash != null) idleFlash.stop();
     }
 
     @Override
@@ -88,4 +124,5 @@ public class CardReaderGUI extends Application {
         launch(args);
     }
 }
+
 
