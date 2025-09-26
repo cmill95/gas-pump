@@ -30,30 +30,26 @@ public class ScreenGUI extends Application {
 
     @Override
     public void start(Stage stage) throws Exception {
-        // Connect only to Screen control port (NOT the main device port)
+
         var entries = java.util.List.of(
                 new DeviceManager.Entry("screen-ctrl", "127.0.0.1", 5021, "screen-ctrl", "screen")
         );
         dm = new DeviceManager(entries);
         screenCtrl = dm.link("screen-ctrl");
 
-        // Size the scene relative to monitor height
         Rectangle2D screenBounds = javafx.stage.Screen.getPrimary().getVisualBounds();
         SCENE_HEIGHT = screenBounds.getHeight() * 0.75;
-        SCENE_WIDTH  = SCENE_HEIGHT; // square
+        SCENE_WIDTH  = SCENE_HEIGHT;
 
         Font defaultFont = new Font("Verdana", SCENE_HEIGHT / 10.0);
 
-        // Build the default scene (5 rows, buttons + labels)
         Scene defaultScene = createDefaultScene(defaultFont);
 
-        // Stage cosmetics
         stage.setResizable(false);
         stage.setTitle("Screen");
         stage.setScene(defaultScene);
         stage.show();
 
-        // Start polling the control port and render code-word states
         startPolling();
     }
 
@@ -64,15 +60,34 @@ public class ScreenGUI extends Application {
         System.exit(0);
     }
 
-    // ------------------------------------------------------------------------
-    // Poll Screen-CTRL for state and render it using the fancy layout
-    // ------------------------------------------------------------------------
+    private void resetAllButtons() {
+        for (Row r : defaultSceneRows) {
+            r.leftButton.setDisable(true);
+            r.rightButton.setDisable(true);
+
+            r.leftButton.setActive(false);
+            r.rightButton.setActive(false);
+
+            r.leftButton.setText("");
+            r.rightButton.setText("");
+
+            r.leftButton.setOnAction(null);
+            r.rightButton.setOnAction(null);
+
+            r.leftButton.setStyle(null);
+            r.rightButton.setStyle(null);
+
+            r.leftButton.setBorder(null);
+            r.rightButton.setBorder(null);
+        }
+    }
+
     private void startPolling() {
         Thread t = new Thread(() -> {
             try {
                 while (true) {
-                    // Expect: MAIN|REPLY|SCREEN|"STATE:WELCOME" (or AUTH_OK / AUTH_NO)
-                    String reply = screenCtrl.request("SCREEN|GET|STATE|None", Duration.ofMillis(500));
+
+                    String reply = screenCtrl.request("SCREEN|GETSTATE|MAIN|None", Duration.ofMillis(500));
                     int q1 = reply.indexOf('"');
                     int q2 = reply.lastIndexOf('"');
                     String payload = (q1 >= 0 && q2 > q1) ? reply.substring(q1 + 1, q2) : "";
@@ -88,42 +103,103 @@ public class ScreenGUI extends Application {
         t.start();
     }
 
-    // Map state code-words to text shown on the “combined” labels
     private void applyState(String state) {
-        // Clear all rows first
+
         for (Row r : defaultSceneRows) r.clear();
+
+        if (state.startsWith("GRADE_MENU:")) {
+            String csv = state.substring("GRADE_MENU:".length());
+            String[] items = csv.split(",");
+
+            for (int i = 0; i < items.length && i < defaultSceneRows.size(); i++) {
+                String[] kv = items[i].split("=");
+                if (kv.length == 2) {
+                    String fuel  = kv[0].trim();
+                    String price = kv[1].trim();
+                    String line  = fuel + " — $" + price;
+
+                    Row row = defaultSceneRows.get(i);
+                    row.showCombined(line, 1, 0);
+
+                    var btn = row.rightButton;
+                    btn.setDisable(false);
+
+                    btn.setActive(false);
+                    btn.setText("");
+
+                    btn.setStyle("-fx-background-color: #2e7d32; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 8;");
+
+                    btn.setBorder(new Border(new BorderStroke(
+                            javafx.scene.paint.Color.BLACK, BorderStrokeStyle.SOLID, new CornerRadii(8), new BorderWidths(3))));
+
+                    btn.setOnMouseEntered(e -> btn.setBorder(new Border(new BorderStroke(
+                            javafx.scene.paint.Color.YELLOW, BorderStrokeStyle.SOLID, new CornerRadii(8), new BorderWidths(3)))));
+                    btn.setOnMouseExited(e -> btn.setBorder(new Border(new BorderStroke(
+                            javafx.scene.paint.Color.BLACK, BorderStrokeStyle.SOLID, new CornerRadii(8), new BorderWidths(3)))));
+
+                    btn.setOnAction(ev -> {
+                        try {
+                            screenCtrl.request("SCREEN|DEVCTL|MAIN|" + fuel, java.time.Duration.ofSeconds(1));
+                        } catch (Exception ignore) {}
+                    });
+                }
+            }
+
+            int nextRow = Math.min(items.length, defaultSceneRows.size() - 1);
+            defaultSceneRows.get(nextRow).showCombined("Press the right-side button to select", 0, 0);
+
+            for (Row r : defaultSceneRows) r.ensureCombinedLayout();
+            return;
+        }
+
+        resetAllButtons();
+
+        if (state.startsWith("FUEL_SELECTED:")) {
+            String fuel = state.substring("FUEL_SELECTED:".length()).trim();
+
+            int topRow = Math.min(1, defaultSceneRows.size() - 1);
+            int botRow = Math.min(2, defaultSceneRows.size() - 1);
+
+            defaultSceneRows.get(topRow).showCombined("Fuel selected: " + fuel, 1, 0);
+            defaultSceneRows.get(botRow).showCombined("Please attach hose to begin fueling", 1, 0);
+
+            for (Row r : defaultSceneRows) r.ensureCombinedLayout();
+            return;
+        }
+
+        if (state.equals("FUEL_SELECTED")) {
+            int topRow = Math.min(1, defaultSceneRows.size() - 1);
+            int botRow = Math.min(2, defaultSceneRows.size() - 1);
+            defaultSceneRows.get(topRow).showCombined("Fuel selected", 1, 0);
+            defaultSceneRows.get(botRow).showCombined("Please attach hose to begin fueling", 1, 0);
+            for (Row r : defaultSceneRows) r.ensureCombinedLayout();
+            return;
+        }
 
         switch (state) {
             case "WELCOME":
-                // Row 0: “Welcome!”
-                defaultSceneRows.get(0).showCombined("Welcome!", /*size*/2, /*font*/0);
-                // Row 1: “Please tap card.”
+                defaultSceneRows.get(0).showCombined("Welcome!", 2, 0);
                 defaultSceneRows.get(1).showCombined("Please tap card.", 1, 0);
-                // Buttons are “unused”; leave them inactive/blank
-                break;
+                for (Row r : defaultSceneRows) r.ensureCombinedLayout();
+                return;
 
             case "AUTH_OK":
                 defaultSceneRows.get(0).showCombined("Authorization Approved", 2, 0);
-                defaultSceneRows.get(1).showCombined("Select fuel type...",    1, 0);
-                break;
+                defaultSceneRows.get(1).showCombined("Select fuel type...", 1, 0);
+                for (Row r : defaultSceneRows) r.ensureCombinedLayout();
+                return;
 
             case "AUTH_NO":
-                defaultSceneRows.get(0).showCombined("Card Declined", 2, 0);
-                defaultSceneRows.get(1).showCombined("Please tap card", 1, 0);
-                break;
-
-            default:
-                // Unknown state: just print it centered on row 0
-                defaultSceneRows.get(0).showCombined(state, 2, 0);
-                break;
+                defaultSceneRows.get(0).showCombined("Declined...", 2, 0);
+                defaultSceneRows.get(1).showCombined("Please try again.", 1, 0);
+                for (Row r : defaultSceneRows) r.ensureCombinedLayout();
+                return;
         }
-        // Ensure layout shows combined label between the two side buttons
+
+        defaultSceneRows.get(0).showCombined(state, 1, 0);
         for (Row r : defaultSceneRows) r.ensureCombinedLayout();
     }
 
-    // ------------------------------------------------------------------------
-    // 5 rows, two side buttons per row, central "combined" label area, black background, Verdana fonts.
-    // ------------------------------------------------------------------------
     private Scene createDefaultScene(Font defaultFont) {
         VBox root = new VBox();
         root.setPrefSize(SCENE_WIDTH, SCENE_HEIGHT);
@@ -138,9 +214,7 @@ public class ScreenGUI extends Application {
             for (int j = 0; j < 2; j++) {
                 DefaultButton b = new DefaultButton(btnNumber++, rowHeight, defaultFont);
                 b.setOnMouseClicked(e -> {
-                    // Buttons are visually present but “unused”; do nothing.
-                    // If we want them active later:
-                    // if (b.active) { /* send something */ }
+
                 });
                 buttons.add(b);
             }
@@ -152,14 +226,10 @@ public class ScreenGUI extends Application {
         return new Scene(root);
     }
 
-    // =====================================================================================
-    // Below are the cosmetic classes
-    // =====================================================================================
-
     static class Row extends HBox {
         private final int number;
         private final DefaultButton leftButton;
-        private final DefaultButton rightButton;
+        public final DefaultButton rightButton;
         private final DefaultLabel leftLabel;
         private final DefaultLabel rightLabel;
         private final DefaultLabel combinedLabel;
@@ -180,13 +250,11 @@ public class ScreenGUI extends Application {
             this.leftButton  = buttons.get(0);
             this.rightButton = buttons.get(1);
 
-            // Create labels panel
-            double labelWidth = width - (2 * height); // buttons are squares of side=height
+            double labelWidth = width - (2 * height);
             this.leftLabel     = new DefaultLabel(labelWidth/2, height, "left");
             this.rightLabel    = new DefaultLabel(labelWidth/2, height, "right");
             this.combinedLabel = new DefaultLabel(labelWidth,   height, "combined");
 
-            // Start with combined label layout (buttons on sides)
             getChildren().addAll(leftButton, combinedLabel, rightButton);
         }
 
@@ -199,12 +267,10 @@ public class ScreenGUI extends Application {
             ensureCombinedLayout();
         }
 
-        // Show center “combined” message with size/font indexes (0..2)
         public void showCombined(String msg, int sizeIndex, int fontIndex) {
             combinedLabel.setLabelText(msg, sizeIndex, fontIndex);
         }
 
-        // Make sure the children reflect the combined layout look
         public void ensureCombinedLayout() {
             getChildren().setAll(leftButton, combinedLabel, rightButton);
         }
@@ -222,7 +288,7 @@ public class ScreenGUI extends Application {
 
             setPrefSize(size, size);
             setFont(font);
-            setText(""); // inactive by default
+            setText("");
         }
 
         public void setActive(boolean active) {
