@@ -20,6 +20,8 @@ import java.util.Random;
 
 public class HoseGUI extends Application {
 
+    private static final boolean OFFLINE_MODE = true;
+
     private static final String HOST = "127.0.0.1";
     private static final int    HOSE_PORT = 5101;
     private static final String HOSE_ID = "hose-01";
@@ -42,11 +44,11 @@ public class HoseGUI extends Application {
     @Override
     public void start(Stage stage) throws Exception {
 
-        var entries = List.of(
-                new DeviceManager.Entry(HOSE_NAME, HOST, HOSE_PORT, HOSE_ID, "binary")
-        );
-        dm = new DeviceManager(entries);
-        hose = dm.binary(HOSE_NAME);
+        //var entries = List.of(
+        //        new DeviceManager.Entry(HOSE_NAME, HOST, HOSE_PORT, HOSE_ID, "binary")
+        //);
+        //dm = new DeviceManager(entries);
+        //hose = dm.binary(HOSE_NAME);
         
         // When Hose is initially run, it is the first connection by default
         firstTimeTankConnection = true;
@@ -56,15 +58,19 @@ public class HoseGUI extends Application {
         connectedImages = new ArrayList<>();
         disconnectedImages = new ArrayList<>();
         loadImages();
-        
-        
-//        Image imgDetached = new Image(
-//                Objects.requireNonNull(HoseGUI.class.getResource("/images/hose_detached.png"))
-//                        .toExternalForm());
-//
-//        Image imgAttached = new Image(
-//                Objects.requireNonNull(HoseGUI.class.getResource("/images/hose_attached.png"))
-//                        .toExternalForm());
+
+        for (int i = 0; i <= 10; i++) {
+            Image d = new Image(Objects.requireNonNull(
+                    HoseGUI.class.getResource("/images/fuelNozzle/GN-D-" + i + ".png")
+            ).toExternalForm());
+            disconnectedImages.add(d);
+        }
+        for (int i = 0; i <= 10; i++) {
+            Image c = new Image(Objects.requireNonNull(
+                    HoseGUI.class.getResource("/images/fuelNozzle/GN-C-" + i + ".png")
+            ).toExternalForm());
+            connectedImages.add(c);
+        }
 
         image = new ImageView(disconnectedImages.get(0));
         image.setFitWidth(240);
@@ -126,6 +132,7 @@ public class HoseGUI extends Application {
     }
 
     private void setSimState(boolean isAttached) {
+        if (OFFLINE_MODE) return;
         try {
             hose.set(isAttached); // sends SET 1/0 over DeviceLink → SimDevices
         } catch (Exception ex) {
@@ -134,6 +141,7 @@ public class HoseGUI extends Application {
     }
 
     private void pollLoop() {
+        if (OFFLINE_MODE) return;
         try {
             while (true) {
                 boolean s = hose.get(); // GET → OK 0|1
@@ -154,7 +162,7 @@ public class HoseGUI extends Application {
     private void loadImages() {
 
         for (int i=0; i<=10; i++) {
-            String imageName = "GN-D-" + i;
+            String imageName = "GN-D-" + i + ".png";
             Image image = new Image(
                 Objects.requireNonNull(HoseGUI.class.getResource("/images/fuelNozzle/" + imageName))
                         .toExternalForm());
@@ -162,7 +170,7 @@ public class HoseGUI extends Application {
         }
 
         for (int i=0; i<=10; i++) {
-            String imageName = "GN-C-" + i;
+            String imageName = "GN-C-" + i + ".png";
             Image image = new Image(
                     Objects.requireNonNull(HoseGUI.class.getResource("/images/fuelNozzle/" + imageName))
                             .toExternalForm());
@@ -198,8 +206,6 @@ public class HoseGUI extends Application {
             image.setImage(connectedImages.get(number));
         }
     }
-
-
 
     public static void main(String[] args) { launch(args); }
 }
