@@ -16,6 +16,7 @@ import javafx.stage.Stage;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Random;
 
 public class HoseGUI extends Application {
 
@@ -33,6 +34,7 @@ public class HoseGUI extends Application {
 
     private List<Image> connectedImages;
     private List<Image> disconnectedImages;
+    private boolean firstTimeTankConnection;
     private boolean tankFull;
     private double tankSize;
     private double currentTankFill;
@@ -45,12 +47,17 @@ public class HoseGUI extends Application {
         );
         dm = new DeviceManager(entries);
         hose = dm.binary(HOSE_NAME);
+        
+        // When Hose is initially run, it is the first connection by default
+        firstTimeTankConnection = true;
 
 
         // Load all images
         connectedImages = new ArrayList<>();
         disconnectedImages = new ArrayList<>();
         loadImages();
+        
+        
 //        Image imgDetached = new Image(
 //                Objects.requireNonNull(HoseGUI.class.getResource("/images/hose_detached.png"))
 //                        .toExternalForm());
@@ -101,6 +108,11 @@ public class HoseGUI extends Application {
 
     // New toggle() function
     private void toggle() {
+        
+        // Checks if this is the first connection to this car
+        if (!attached && firstTimeTankConnection) {
+            initializeNewTank();
+        }
 
         // Gets the index of the image in one of the two arrays
         int index = attached ? connectedImages.indexOf(
@@ -156,6 +168,34 @@ public class HoseGUI extends Application {
                             .toExternalForm());
 
             connectedImages.add(image);
+        }
+    }
+
+
+    // A connection to a new car has been made, tank needs to be "sensed"
+    private void initializeNewTank() {
+
+        // It is now false that this tank is new, this variable must be reset before a new connection
+        // can be made
+        firstTimeTankConnection = false;
+
+        Random rand = new Random();
+        tankFull = false;
+        tankSize = 10 + rand.nextDouble() * 20;
+        currentTankFill = tankSize * (rand.nextDouble() * rand.nextDouble() * rand.nextDouble());
+
+        double percentFull = currentTankFill / tankSize;
+        loadNewImage((int) Math.floor(percentFull * 11));
+    }
+
+    // Loads new image 0-10 based on the number sent and status of attached variable
+    private void loadNewImage(int number) {
+
+        if (!attached) {
+            image.setImage(disconnectedImages.get(number));
+        }
+        else {
+            image.setImage(connectedImages.get(number));
         }
     }
 

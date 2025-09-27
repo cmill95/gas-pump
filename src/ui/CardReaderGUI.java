@@ -28,6 +28,7 @@ public class CardReaderGUI extends Application {
 
     private Image imgIdle0, imgIdle1, imgAccepted, imgDeclined;
     private ImageView cardView;
+    private Label status;
 
     private Timeline idleFlash;
     private boolean flip;
@@ -47,13 +48,49 @@ public class CardReaderGUI extends Application {
         imgDeclined= new Image(getClass().getResourceAsStream("/images/CR-3.png"));
 
         cardView = new ImageView(imgIdle0);
+        cardView.setOnMouseClicked(e -> {
+            cardRead();
+        });
         cardView.setPreserveRatio(true);
         cardView.setFitWidth(260);
 
-        Label status = new Label("Ready. Tap to send a random digit (0–9).");
-        Button tap = new Button("Tap Card");
+        status = new Label("Ready. Tap to send a random digit (0–9).");
 
-        tap.setOnAction(ev -> {
+        VBox root = new VBox(12, cardView, status);
+        root.setPadding(new Insets(16));
+        root.setAlignment(Pos.CENTER);
+
+        stage.setTitle("Card Reader");
+        stage.setScene(new Scene(root, 320, 380));
+        stage.setOnCloseRequest(e -> {
+            try { if (dm != null) dm.close(); } catch (Exception ignore) {}
+            Platform.exit();
+        });
+        stage.show();
+
+        startIdle();
+    }
+
+    private void startIdle() {
+        if (idleFlash != null) idleFlash.stop();
+        flip = false;
+        idleFlash = new Timeline(new KeyFrame(Duration.millis(500), e -> {
+            flip = !flip;
+            cardView.setImage(flip ? imgIdle1 : imgIdle0);
+        }));
+        idleFlash.setCycleCount(Timeline.INDEFINITE);
+        idleFlash.play();
+    }
+
+    private void stopIdle() {
+        if (idleFlash != null) idleFlash.stop();
+    }
+
+    // The card image was pressed, simulates a card read
+    private void cardRead() {
+
+        if (cardView.getImage().equals(imgIdle0) || cardView.getImage().equals(imgIdle1)) {
+
             int d = ThreadLocalRandom.current().nextInt(10);
 
             String ok;
@@ -83,36 +120,7 @@ public class CardReaderGUI extends Application {
                 startIdle();
             });
             back.play();
-        });
-
-        VBox root = new VBox(12, cardView, status, tap);
-        root.setPadding(new Insets(16));
-        root.setAlignment(Pos.CENTER);
-
-        stage.setTitle("Card Reader");
-        stage.setScene(new Scene(root, 320, 380));
-        stage.setOnCloseRequest(e -> {
-            try { if (dm != null) dm.close(); } catch (Exception ignore) {}
-            Platform.exit();
-        });
-        stage.show();
-
-        startIdle();
-    }
-
-    private void startIdle() {
-        if (idleFlash != null) idleFlash.stop();
-        flip = false;
-        idleFlash = new Timeline(new KeyFrame(Duration.millis(500), e -> {
-            flip = !flip;
-            cardView.setImage(flip ? imgIdle1 : imgIdle0);
-        }));
-        idleFlash.setCycleCount(Timeline.INDEFINITE);
-        idleFlash.play();
-    }
-
-    private void stopIdle() {
-        if (idleFlash != null) idleFlash.stop();
+        }
     }
 
     @Override
