@@ -2,6 +2,8 @@ package ui;
 
 import devices.BinaryDevice;
 import io.bus.DeviceManager;
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
@@ -12,6 +14,7 @@ import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
+import javafx.util.Duration;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -61,13 +64,13 @@ public class HoseGUI extends Application {
 
         for (int i = 0; i <= 10; i++) {
             Image d = new Image(Objects.requireNonNull(
-                    HoseGUI.class.getResource("/images/fuelNozzle/GN-D-" + i + ".png")
+                    HoseGUI.class.getResource("/images/hose/GN-D-" + i + ".png")
             ).toExternalForm());
             disconnectedImages.add(d);
         }
         for (int i = 0; i <= 10; i++) {
             Image c = new Image(Objects.requireNonNull(
-                    HoseGUI.class.getResource("/images/fuelNozzle/GN-C-" + i + ".png")
+                    HoseGUI.class.getResource("/images/hose/GN-C-" + i + ".png")
             ).toExternalForm());
             connectedImages.add(c);
         }
@@ -129,6 +132,8 @@ public class HoseGUI extends Application {
         setSimState(attached);
         image.setImage(attached ? connectedImages.get(index) : disconnectedImages.get(index));
         status.setText(attached ? "Hose: ATTACHED" : "Hose: DETACHED");
+
+        incrementLoop();
     }
 
     private void setSimState(boolean isAttached) {
@@ -158,13 +163,43 @@ public class HoseGUI extends Application {
         }
     }
 
+    private void incrementLoop() {
+        // Create the timeline and keep a reference so we can stop it
+        Timeline timeline = new Timeline();
+
+        KeyFrame keyFrame = new KeyFrame(Duration.millis(200), e -> {
+            if (!attached || tankFull) {
+                timeline.stop(); // now we can stop it directly
+                return;
+            }
+
+            // increment
+            currentTankFill += tankSize * 0.01;
+            if (currentTankFill >= tankSize) {
+                tankFull = true;
+            }
+
+            // calculate percentage
+            double percentFull = currentTankFill / tankSize;
+
+            // update the UI
+            changeImage((int) Math.floor(percentFull * 11));
+        });
+
+        timeline.getKeyFrames().add(keyFrame);
+        timeline.setCycleCount(Timeline.INDEFINITE);
+        timeline.play();
+    }
+
+
+
     // This method loads the 22 images used for the gass nozzle
     private void loadImages() {
 
         for (int i=0; i<=10; i++) {
             String imageName = "GN-D-" + i + ".png";
             Image image = new Image(
-                Objects.requireNonNull(HoseGUI.class.getResource("/images/fuelNozzle/" + imageName))
+                Objects.requireNonNull(HoseGUI.class.getResource("/images/hose/" + imageName))
                         .toExternalForm());
             disconnectedImages.add(image);
         }
@@ -172,7 +207,7 @@ public class HoseGUI extends Application {
         for (int i=0; i<=10; i++) {
             String imageName = "GN-C-" + i + ".png";
             Image image = new Image(
-                    Objects.requireNonNull(HoseGUI.class.getResource("/images/fuelNozzle/" + imageName))
+                    Objects.requireNonNull(HoseGUI.class.getResource("/images/hose/" + imageName))
                             .toExternalForm());
 
             connectedImages.add(image);
@@ -193,11 +228,15 @@ public class HoseGUI extends Application {
         currentTankFill = tankSize * (rand.nextDouble() * rand.nextDouble() * rand.nextDouble());
 
         double percentFull = currentTankFill / tankSize;
-        loadNewImage((int) Math.floor(percentFull * 11));
+        changeImage((int) Math.floor(percentFull * 11));
     }
 
     // Loads new image 0-10 based on the number sent and status of attached variable
-    private void loadNewImage(int number) {
+    private void changeImage(int number) {
+
+        if (tankFull) {
+            return;
+        }
 
         if (!attached) {
             image.setImage(disconnectedImages.get(number));
