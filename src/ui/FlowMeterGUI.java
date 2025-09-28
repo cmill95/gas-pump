@@ -81,7 +81,6 @@ public class FlowMeterGUI extends Application {
             image.setFitHeight(size);
         }
 
-
         pane.getChildren().addAll(images.get(2), text);
         pane.setPrefSize(SCENE_WIDTH, SCENE_HEIGHT);
         pane.setMaxSize(SCENE_WIDTH, SCENE_HEIGHT);

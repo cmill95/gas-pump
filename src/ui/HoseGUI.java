@@ -56,15 +56,7 @@ public class HoseGUI extends Application {
         connectedImages = new ArrayList<>();
         disconnectedImages = new ArrayList<>();
         loadImages();
-        
-        
-//        Image imgDetached = new Image(
-//                Objects.requireNonNull(HoseGUI.class.getResource("/images/hose_detached.png"))
-//                        .toExternalForm());
-//
-//        Image imgAttached = new Image(
-//                Objects.requireNonNull(HoseGUI.class.getResource("/images/hose_attached.png"))
-//                        .toExternalForm());
+
 
         image = new ImageView(disconnectedImages.get(0));
         image.setFitWidth(240);
@@ -96,16 +88,6 @@ public class HoseGUI extends Application {
         if (dm != null) dm.close();
     }
 
-
-    // Old toggle() function
-//    private void toggle(Image imgDetached, Image imgAttached) {
-//        attached = !attached;
-//        setSimState(attached);
-//        image.setImage(attached ? imgAttached : imgDetached);
-//        status.setText(attached ? "Hose: ATTACHED" : "Hose: DETACHED");
-//    }
-
-
     // New toggle() function
     private void toggle() {
         
@@ -134,8 +116,18 @@ public class HoseGUI extends Application {
     }
 
     private void pollLoop() {
+
         try {
             while (true) {
+
+                // This increments the tank fill
+                if (attached && !tankFull) {
+
+                    double increment = tankSize * 0.01;
+                    changeImage((int) Math.floor(((currentTankFill+ increment)/tankSize) * 11));
+                }
+
+
                 boolean s = hose.get(); // GET → OK 0|1
                 if (s != attached) {
                     attached = s;
@@ -150,13 +142,13 @@ public class HoseGUI extends Application {
         }
     }
 
-    // This method loads the 22 images used for the gass nozzle
+    // This method loads the 22 images used for the gas nozzle
     private void loadImages() {
 
         for (int i=0; i<=10; i++) {
             String imageName = "GN-D-" + i;
             Image image = new Image(
-                Objects.requireNonNull(HoseGUI.class.getResource("/images/fuelNozzle/" + imageName))
+                Objects.requireNonNull(HoseGUI.class.getResource("/images/hose/" + imageName))
                         .toExternalForm());
             disconnectedImages.add(image);
         }
@@ -164,13 +156,11 @@ public class HoseGUI extends Application {
         for (int i=0; i<=10; i++) {
             String imageName = "GN-C-" + i;
             Image image = new Image(
-                    Objects.requireNonNull(HoseGUI.class.getResource("/images/fuelNozzle/" + imageName))
+                    Objects.requireNonNull(HoseGUI.class.getResource("/images/hose/" + imageName))
                             .toExternalForm());
-
             connectedImages.add(image);
         }
     }
-
 
     // A connection to a new car has been made, tank needs to be "sensed"
     private void initializeNewTank() {
@@ -185,11 +175,11 @@ public class HoseGUI extends Application {
         currentTankFill = tankSize * (rand.nextDouble() * rand.nextDouble() * rand.nextDouble());
 
         double percentFull = currentTankFill / tankSize;
-        loadNewImage((int) Math.floor(percentFull * 11));
+        changeImage((int) Math.floor(percentFull * 11));
     }
 
     // Loads new image 0-10 based on the number sent and status of attached variable
-    private void loadNewImage(int number) {
+    private void changeImage(int number) {
 
         if (!attached) {
             image.setImage(disconnectedImages.get(number));

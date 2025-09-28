@@ -11,7 +11,6 @@ import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
-import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
@@ -42,10 +41,10 @@ public class CardReaderGUI extends Application {
         dm = new DeviceManager(entries);
         reader = dm.link("cardreader-ctrl");
 
-        imgIdle0   = new Image(getClass().getResourceAsStream("/images/CR-0.png"));
-        imgIdle1   = new Image(getClass().getResourceAsStream("/images/CR-1.png"));
-        imgAccepted= new Image(getClass().getResourceAsStream("/images/CR-2.png"));
-        imgDeclined= new Image(getClass().getResourceAsStream("/images/CR-3.png"));
+        imgIdle0   = new Image(getClass().getResourceAsStream("/images/cardReader/CR-0.png"));
+        imgIdle1   = new Image(getClass().getResourceAsStream("/images/cardReader/CR-1.png"));
+        imgAccepted= new Image(getClass().getResourceAsStream("/images/cardReader/CR-2.png"));
+        imgDeclined= new Image(getClass().getResourceAsStream("/images/cardReader/CR-3.png"));
 
         cardView = new ImageView(imgIdle0);
         cardView.setOnMouseClicked(e -> {
