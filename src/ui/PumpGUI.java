@@ -59,7 +59,7 @@ public final class PumpGUI extends Application {
         imgUpper = load(IMG_UPPER);
         imgLower = load(IMG_LOWER);
 
-        view = new ImageView(imgOff);
+        view = new ImageView(imgUpper);
         view.setPreserveRatio(true);
         view.setFitWidth(360);
 
@@ -88,7 +88,9 @@ public final class PumpGUI extends Application {
     private void tick() {
         boolean attached = getAttached();
         if (!attached) {
-            if (view.getImage() != imgOff) view.setImage(imgOff);
+            if (view.getImage() != imgUpper) view.setImage(imgLower);
+            if (view.getImage() != imgLower) view.setImage(imgUpper);
+
             return;
         }
         // toggle upper/lower while attached
@@ -98,7 +100,7 @@ public final class PumpGUI extends Application {
 
     private void refreshNow() {
         if (!getAttached()) {
-            view.setImage(imgOff);
+            view.setImage(imgUpper);
         } else {
             view.setImage(showUpper ? imgUpper : imgLower);
         }
@@ -176,3 +178,4 @@ public final class PumpGUI extends Application {
 
     public static void main(String[] args) { launch(args); }
 }
+
