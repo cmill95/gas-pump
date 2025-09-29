@@ -1,9 +1,17 @@
 import io.bus.DeviceManager;
 import io.bus.DeviceLink;
+
+import java.io.IOException;
 import java.util.List;
 import java.time.Duration;
+import java.util.Objects;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 public class Main {
+
 
     // ---- Safe helpers ------------------------------------------------------
     private static String extractQuoted(String s) {
@@ -22,6 +30,69 @@ public class Main {
     }
     // -----------------------------------------------------------------------
 
+    private static final class ScreenController {
+
+        ScreenController(DeviceLink screen) {
+            this.screen = screen;
+        }
+        private final DeviceLink screen;
+        private String last;
+
+        synchronized boolean show(String payload) throws IOException {
+            if (Objects.equals(last, payload)) return false;
+            screen.request("SCREEN|DISPLAY|MAIN|\"" + payload + "\"", java.time.Duration.ofSeconds(1));
+            System.out.println("[screen] state -> " + payload);
+            last = payload;
+            return true;
+        }
+
+        synchronized void showWelcome() throws IOException { show("WELCOME"); }
+    }
+
+    // -----------------------------------------------------------------------
+
+    private static final class AuthTimeouts {
+        private final ScheduledExecutorService ses = Executors.newSingleThreadScheduledExecutor();
+        private final ScreenController sc;
+        private final Runnable resetSession;
+        private ScheduledFuture<?> pending;
+        private long seq = 0;
+
+        AuthTimeouts(ScreenController sc, Runnable resetSession) {
+            this.sc = sc;
+            this.resetSession = resetSession;
+        }
+
+        synchronized void start(long delayMs, String label) {
+            cancel("rearm:" + label);
+            long id = ++seq;
+            long firesAt = System.currentTimeMillis() + delayMs;
+            System.out.println(String.format("⏲ start #%d %s delay=%dms firesAt=%tT", id, label, delayMs, firesAt));
+            pending = ses.schedule(() -> {
+                try {
+                    System.out.println(String.format("⏲ fire  #%d %s", id, label));
+                    resetSession.run();
+                    sc.showWelcome();
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                } finally {
+                    clear();
+                }
+            }, delayMs, TimeUnit.MILLISECONDS);
+        }
+
+        synchronized void cancel(String reason) {
+            if (pending != null) {
+                System.out.println("⏲ cancel " + reason);
+                pending.cancel(false);
+                pending = null;
+            }
+        }
+
+        private synchronized void clear() { pending = null; }
+    }
+
+    // -----------------------------------------------------------------------
     public static void main(String[] args) throws Exception {
         var entries = List.of(
                 new DeviceManager.Entry("screen",        "127.0.0.1", 5001, "screen-01",  "screen"),
@@ -40,12 +111,16 @@ public class Main {
             DeviceLink cardSrv  = dm.link("cardserver");
             DeviceLink station  = dm.link("stationserver");
 
+            ScreenController sc = new ScreenController(screen);
+            AuthTimeouts timeouts = new AuthTimeouts(sc, () -> {
+            });
+
             while (true) {
 
                 System.out.println("[main] STATUS READY -> Screen");
                 String allow = screen.request("SCREEN|READY|MAIN|None", Duration.ofSeconds(1));
                 System.out.println("[main] Screen replied: " + allow);
-                screen.request("SCREEN|DISPLAY|MAIN|\"WELCOME\"", Duration.ofSeconds(1));
+                sc.showWelcome();
 
                 System.out.println("[main] Waiting for CARD_TAP...");
                 String tap;
@@ -69,32 +144,36 @@ public class Main {
                     String listPayload = extractQuoted(list);
                     String menuCsv     = afterColon(listPayload);
 
-                    screen.request("SCREEN|DISPLAY|MAIN|\"GRADE_MENU:" + menuCsv + "\"", java.time.Duration.ofSeconds(1));
+                    sc.show("GRADE_MENU:" + menuCsv);
+                    timeouts.start(INACTIVITY_MS, "post-auth idle");
 
-                    final long deadline = System.currentTimeMillis() + 30_000;
-                    String sel;
+                    final long deadline = System.currentTimeMillis() + INACTIVITY_MS;
+                    String sel = null;
+                    boolean timedOut = false;
                     while (true) {
                         sel = screen.request("SCREEN|CHECK|MAIN|None", java.time.Duration.ofSeconds(1));
                         if (sel != null && sel.startsWith("MAIN|EVENT|SCREEN|\"GRADE_SELECTED:")) break;
-                        if (System.currentTimeMillis() > deadline) {
-
-                            screen.request("SCREEN|DISPLAY|MAIN|\"WELCOME\"", java.time.Duration.ofSeconds(1));
-                            continue;
-                        }
+                        if (System.currentTimeMillis() > deadline) { timedOut = true; break; }
                         Thread.sleep(200);
                     }
+                    if (timedOut) {
+                        timeouts.cancel("manual-timeout");
+                        sc.showWelcome();
+                        continue;
+                    }
+                    timeouts.cancel("activity:grade_selected");
 
                     String payload = extractQuoted(sel);
                     String fuel    = afterColon(payload).trim();
 
-                    screen.request("SCREEN|DISPLAY|MAIN|\"FUEL_SELECTED:" + fuel + "\"", java.time.Duration.ofSeconds(1));
+                    sc.show("FUEL_SELECTED:" + fuel);
 
                     Thread.sleep(CONFIRM_MS);
 
-                    screen.request("SCREEN|DISPLAY|MAIN|\"WELCOME\"", java.time.Duration.ofSeconds(1));
+                    sc.showWelcome();
                 } else {
 
-                    screen.request("SCREEN|DISPLAY|MAIN|\"AUTH_NO\"", Duration.ofSeconds(1));
+                    sc.show("AUTH_NO");
                     System.out.println("[main] Declined — dwell " + (DECLINE_DWELL_MS / 1000.0) + "s, then reset.");
                     Thread.sleep(DECLINE_DWELL_MS);
                 }

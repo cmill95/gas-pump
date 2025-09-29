@@ -77,9 +77,11 @@ public final class SimDevices {
                 return "MAIN|REPLY|SCREEN|\"ALLOWPAYMENT\"";
             }
             if (line.equals("SCREEN|DISPLAY|MAIN|\"WELCOME\"")) {
-                screenState = "WELCOME";
-                pendingGrade = null;      // 🔧 FIX: drop any stale selection
-                System.out.println("[sim] SCREEN state -> " + screenState + " (pendingGrade cleared)");
+                if (!"WELCOME".equals(screenState)) {
+                    screenState = "WELCOME";
+                    pendingGrade = null;
+                    System.out.println("[sim] SCREEN state -> " + screenState + " (pendingGrade cleared)");
+                }
                 return "MAIN|REPLY|SCREEN|\"OK\"";
             }
             if (line.startsWith("SCREEN|DISPLAY|MAIN|")) {
