@@ -45,12 +45,12 @@ public class HoseGUI extends Application {
     private DeviceLink hoseCtrl;
 
     // ---- GUI state ----------------------------------------------------------
-    private boolean attached = false; // start DETACHED
+    private boolean attached = false;
     private ImageView image;
     private Label status;
 
-    private javafx.animation.Timeline fuelTicker;  // NEW: single ticker
-    private int fillIndex = 0;                     // 0..10 based on image shown
+    private javafx.animation.Timeline fuelTicker;
+    private int fillIndex = 0;
 
     private List<Image> connectedImages;
     private List<Image> disconnectedImages;
@@ -61,22 +61,19 @@ public class HoseGUI extends Application {
 
     @Override
     public void start(Stage stage) throws Exception {
-        // Wire exactly like Main: text protocol device via DeviceLink
+
         var entries = List.of(
                 new DeviceManager.Entry("hose-ctrl", "127.0.0.1", 5121, "hose-ctrl", "hosectrl")
         );
         dm = new DeviceManager(entries);
         hoseCtrl = dm.link("hose-ctrl");
 
-        // First connection defaults
         firstTimeTankConnection = true;
 
-        // Load images
         connectedImages = new ArrayList<>();
         disconnectedImages = new ArrayList<>();
         loadImages();
 
-        // Initial image
         image = new ImageView(disconnectedImages.get(0));
         image.setFitWidth(240);
         image.setPreserveRatio(true);
@@ -85,16 +82,12 @@ public class HoseGUI extends Application {
         status = new Label("Hose: DETACHED");
         status.setStyle("-fx-font-size: 16px;");
 
-        // Publish initial flag
         publishAttached(attached);
 
-        // Click to toggle (simulate attach/detach)
         image.setOnMouseClicked(e -> toggle());
 
-        // Push initial state to the sim server
         setSimState(attached);
 
-        // Optional: background poll to reflect external changes
         Thread poll = new Thread(this::pollLoop, "hose-poll");
         poll.setDaemon(true);
         poll.start();
@@ -111,7 +104,6 @@ public class HoseGUI extends Application {
         if (dm != null) dm.close();
     }
 
-    // Toggle via GUI click
     private void toggle() {
         boolean next = !attached;
         suppressPoll = true;
@@ -120,11 +112,9 @@ public class HoseGUI extends Application {
             hoseCtrl.request("HOSECTRL|SET|MAIN|" + (next ? "1" : "0"), java.time.Duration.ofSeconds(1));
         } catch (Exception ignored) {}
 
-        // If attaching while NOT armed, re-seed a fresh random snapshot
         if (next && !armed) {
             initializeNewTank();
         }
-        // If attaching while armed: DO NOT re-seed; we resume from currentTankFill
 
         attached = next;
         publishAttached(attached);
@@ -141,7 +131,7 @@ public class HoseGUI extends Application {
             try {
                 Thread.sleep(250);
                 String r = hoseCtrl.request("HOSECTRL|GET|MAIN|None", java.time.Duration.ofSeconds(1));
-                String payload = extractQuoted(r); // "STATE:0,ARMED:1"
+                String payload = extractQuoted(r);
                 boolean sAttached = parseAttached(payload);
                 boolean sArmed    = parseArmed(payload);
 
@@ -151,7 +141,7 @@ public class HoseGUI extends Application {
 
                 Platform.runLater(() -> {
                     status.setText(attached ? "Hose: ATTACHED" : "Hose: DETACHED");
-                    image.setImage(attached ? connectedImages.get(0) : disconnectedImages.get(0));
+                    changeImage(fillIndex);
                 });
             } catch (Exception ignored) {
             } finally {
@@ -160,7 +150,6 @@ public class HoseGUI extends Application {
         }, "hose-debounce").start();
     }
 
-    // Send HOSE|SET|MAIN|0|1 (mirrors Main protocol)
     private void setSimState(boolean isAttached) {
         publishAttached(isAttached);
         try {
@@ -171,14 +160,23 @@ public class HoseGUI extends Application {
         }
     }
 
-    // Poll HOSE|GET|MAIN|None and reflect external changes in the GUI
+    private void resetForNewSession() {
+        firstTimeTankConnection = true;
+        tankFull = false;
+        currentTankFill = 0;
+        tankSize = 0;
+        fillIndex = 0;
+        changeImage(fillIndex);
+        stopFuelTicker();
+    }
+
     private void pollLoop() {
         try {
             while (true) {
                 if (suppressPoll) { Thread.sleep(50); continue; }
 
                 String r = hoseCtrl.request("HOSECTRL|GET|MAIN|None", java.time.Duration.ofSeconds(1));
-                String payload = extractQuoted(r); // e.g., "STATE:1,ARMED:0"
+                String payload = extractQuoted(r);
 
                 boolean sAttached = parseAttached(payload);
                 boolean sArmed    = parseArmed(payload);
@@ -190,14 +188,17 @@ public class HoseGUI extends Application {
                 armed    = sArmed;
                 publishAttached(attached);
 
-                // If just attached while NOT armed -> show a fresh random snapshot
+                if (armedChanged && !armed) {
+                    resetForNewSession();
+                }
+
                 if (attachChanged && attached && !armed) {
                     initializeNewTank();
                 }
 
                 Platform.runLater(() -> {
                     status.setText(attached ? "Hose: ATTACHED" : "Hose: DETACHED");
-                    changeImage(fillIndex);  // <- respect current frame
+                    changeImage(fillIndex);
                 });
 
                 if (armed && attached && !tankFull) {
@@ -209,31 +210,27 @@ public class HoseGUI extends Application {
                 Thread.sleep(200);
             }
         } catch (Exception ignored) {
-            // exit on close/error
         }
     }
 
     private void startFuelTickerIfNeeded() {
         if (fuelTicker != null) {
-            // already created; just (re)start if we are allowed to run
+
             if (armed && attached && !tankFull) fuelTicker.play();
             return;
         }
         fuelTicker = new javafx.animation.Timeline(
                 new javafx.animation.KeyFrame(javafx.util.Duration.seconds(1), e -> {
-                    // Run only when ARMED & ATTACHED
+
                     if (!armed || !attached || tankFull) {
                         fuelTicker.pause();
                         return;
                     }
-                    // advance one image
                     if (fillIndex < 10) {
                         fillIndex += 1;
                         changeImage(fillIndex);
-                        // optional: update your internal "currentTankFill" if you rely on it elsewhere
-                        // currentTankFill = tankSize * ((fillIndex + 1) / 11.0);
+
                     }
-                    // reached full
                     if (fillIndex >= 10) {
                         tankFull = true;
                         try {
@@ -251,7 +248,6 @@ public class HoseGUI extends Application {
         if (fuelTicker != null) fuelTicker.pause();
     }
 
-    // Load 22 images (11 disconnected, 11 connected)
     private void loadImages() {
         for (int i = 0; i <= 10; i++) {
             String imageName = "GN-D-" + i + ".png";
@@ -281,7 +277,7 @@ public class HoseGUI extends Application {
     private void changeImage(int number) {
         if (tankFull) return;
         int idx = Math.max(0, Math.min(10, number));
-        fillIndex = idx;  // <- keep authoritative
+        fillIndex = idx;
         if (!attached) {
             image.setImage(disconnectedImages.get(idx));
         } else {
@@ -290,7 +286,6 @@ public class HoseGUI extends Application {
     }
 
     private static boolean parseArmed(String payload) {
-        // payload like: STATE:0,ARMED:1
         int i = payload.indexOf("ARMED:");
         return i >= 0 && i+6 < payload.length() && payload.charAt(i+6) == '1';
     }

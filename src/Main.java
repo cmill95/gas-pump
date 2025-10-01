@@ -98,12 +98,13 @@ public class Main {
                 new DeviceManager.Entry("cardreader",    "127.0.0.1", 5201, "cardr-01",   "cardreader"),
                 new DeviceManager.Entry("cardserver",    "127.0.0.1", 5301, "cards-01",   "cardserver"),
                 new DeviceManager.Entry("stationserver", "127.0.0.1", 5401, "station-01", "stationserver"),
-                new DeviceManager.Entry("hose",          "127.0.0.1", 5101, "hose-01",    "hose")
+                new DeviceManager.Entry("hose",          "127.0.0.1", 5101, "hose-01",    "hose"),
+                new DeviceManager.Entry("pump", "127.0.0.1", 5501, "pump-01", "pump"),
+                new DeviceManager.Entry("flowmeter", "127.0.0.1", 5601, "flowmeter-01", "flowmeter")
         );
 
         final int INACTIVITY_MS     = 30_000;
         final int DECLINE_DWELL_MS  = 2_000;
-        final int CONFIRM_MS    = 10_000;
         final int DETACH_TIMEOUT_MS = 30_000;
         final int THANK_YOU_DWELL_MS = 2_000;
 
@@ -113,6 +114,8 @@ public class Main {
             DeviceLink cardSrv  = dm.link("cardserver");
             DeviceLink station  = dm.link("stationserver");
             DeviceLink hose     = dm.link("hose");
+            DeviceLink pump = dm.link("pump");
+            DeviceLink flowmeter = dm.link("flowmeter");
 
             ScreenController sc = new ScreenController(screen);
             AuthTimeouts timeouts = new AuthTimeouts(sc, () -> {
@@ -176,34 +179,30 @@ public class Main {
 
                     while (true) {
                         String r = hose.request("HOSE|GET|MAIN|None", Duration.ofSeconds(1));
-                        String state = afterColon(extractQuoted(r)).trim(); // "0" or "1"
-                        if ("1".equals(state)) break;                       // attached
-                        sc.show("ATTACH_HOSE");                             // idempotent
+                        String state = afterColon(extractQuoted(r)).trim();
+                        if ("1".equals(state)) break;
+                        sc.show("ATTACH_HOSE");
                         Thread.sleep(200);
                     }
 
                     timeouts.cancel("activity:hose_attached");
 
-// --- Arm fueling and show FUELING screen -----------------------------------
                     hose.request("HOSE|START|MAIN|None", Duration.ofSeconds(1));
                     sc.show("FUELING");
 
-// Optional: monitor detach/timeout while fueling
                     long detachDeadline = Long.MAX_VALUE;
                     while (true) {
                         String rs = hose.request("HOSE|STATUS|MAIN|None", Duration.ofSeconds(1));
-                        String statusPayload = extractQuoted(rs);    // e.g., "STATE:1,ARMED:1,FULL:0"
+                        String statusPayload = extractQuoted(rs);
                         boolean isAttached = statusPayload.contains("STATE:1");
                         boolean isArmed    = statusPayload.contains("ARMED:1");
                         boolean isFull     = statusPayload.contains("FULL:1");
 
-// If someone disarmed externally, bail
                         if (!isArmed) {
                             sc.showWelcome();
                             break;
                         }
 
-// Full -> thank you, stop, return to welcome
                         if (isFull) {
                             sc.show("THANK_YOU");
                             hose.request("HOSE|STOP|MAIN|None", Duration.ofSeconds(1));
@@ -212,7 +211,6 @@ public class Main {
                             break;
                         }
 
-// Pause/resume handling on detach
                         if (!isAttached) {
                             if (detachDeadline == Long.MAX_VALUE) {
                                 detachDeadline = System.currentTimeMillis() + DETACH_TIMEOUT_MS;
@@ -223,7 +221,7 @@ public class Main {
                                 break;
                             }
                         } else {
-                            detachDeadline = Long.MAX_VALUE; // reattached -> resume
+                            detachDeadline = Long.MAX_VALUE;
                         }
 
                         Thread.sleep(200);

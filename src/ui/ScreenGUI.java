@@ -113,7 +113,7 @@ public class ScreenGUI extends Application {
         fuelingTitle.setStyle("-fx-font-size: 24px; -fx-font-weight: bold;");
         fuelingBar = new javafx.scene.control.ProgressBar();
         fuelingBar.setPrefWidth(260);
-        fuelingBar.setProgress(-1); // indeterminate by default
+        fuelingBar.setProgress(-1);
         fuelingRoot = new javafx.scene.layout.VBox(12, fuelingTitle, fuelingBar);
         fuelingRoot.setPadding(new javafx.geometry.Insets(16));
     }
@@ -127,9 +127,6 @@ public class ScreenGUI extends Application {
             fuelingBar.setProgress(Math.max(0, Math.min(100, pct)) / 100.0);
             fuelingTitle.setText("Fueling… " + pct + "%");
         }
-        // TODO: swap into your main container, e.g.:
-        // root.setCenter(fuelingRoot);
-        // or cardsPane.getChildren().setAll(fuelingRoot);
     }
 
     private void applyState(String state) {

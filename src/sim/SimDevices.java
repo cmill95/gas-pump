@@ -22,6 +22,10 @@ public final class SimDevices {
         int stationPort = 5401;
         int hosePort = 5101;
         int hosePortCtl = 5121;
+        int pumpPort = 5501;
+        int pumpPortCtl = 5521;
+        int flowMeterPort = 5601;
+        int flowMeterPortCtl = 5621;
 
         chooseAvailable3();
 
@@ -41,6 +45,10 @@ public final class SimDevices {
         new Thread(() -> new StationServer("station-01", stationPort).serve()).start();
         new Thread(() -> new HoseServer("hose-01", hosePort).serve()).start();
         new Thread(() -> new HoseControlServer("hose-ctrl", hosePortCtl).serve()).start();
+        new Thread(() -> new PumpServer("pump-01", pumpPort).serve()).start();
+        new Thread(() -> new PumpControlServer("pump-ctrl", pumpPortCtl).serve()).start();
+        new Thread(() -> new FlowMeterServer("flowmeter-01", flowMeterPort).serve()).start();
+        new Thread(() -> new FlowMeterControlServer("flowmeter-ctrl", flowMeterPortCtl).serve()).start();
     }
 
     // ─────────────── Base server ───────────────
@@ -117,9 +125,8 @@ public final class SimDevices {
             }
             if (line.startsWith("SCREEN|DISPLAY|MAIN|\"FUELING:")) {
                 String payload = line.substring("SCREEN|DISPLAY|MAIN|\"".length(), line.length() - 1);
-                // payload is like FUELING:42
                 if (!payload.equals(screenState)) {
-                    screenState = payload; // e.g., "FUELING:42"
+                    screenState = payload;
                     System.out.println("[sim] SCREEN -> " + payload);
                 }
                 return "MAIN|REPLY|SCREEN|\"OK\"";
@@ -344,45 +351,116 @@ public final class SimDevices {
     }
 
     static final class HoseServer extends SimServer {
-        HoseServer(String id, int port) { super(id, port); }
-        @Override String deviceName() { return "HOSE"; }
+        HoseServer(String id, int port) {
+            super(id, port);
+        }
+        @Override
+        String deviceName() {
+            return "HOSE";
+        }
 
-        @Override String handle(String line) {
-            // Query current state (just attachment)
+        @Override
+        String handle(String line) {
             if (line.equals("HOSE|GET|MAIN|None")) {
                 return "MAIN|REPLY|HOSE|\"STATE:" + (hoseAttached ? "1" : "0") + "\"";
             }
 
-            // Full status (attachment + armed)
             if (line.equals("HOSE|STATUS|MAIN|None")) {
                 return "MAIN|REPLY|HOSE|\"STATE:" + (hoseAttached ? "1" : "0")
                         + ",ARMED:" + (hoseArmed ? "1" : "0")
-                        + ",FULL:"  + (hoseFull ? "1" : "0") + "\"";
+                        + ",FULL:" + (hoseFull ? "1" : "0") + "\"";
             }
 
-            // Arm fueling (Main calls when ready to fuel)
             if (line.equals("HOSE|START|MAIN|None")) {
                 hoseArmed = true;
                 System.out.println("[sim] HOSE START (armed=true)");
                 return "MAIN|REPLY|HOSE|\"OK\"";
             }
 
-            // Disarm fueling (e.g., end/timeout)
             if (line.equals("HOSE|STOP|MAIN|None")) {
                 hoseArmed = false;
+                hoseFull = false;
                 System.out.println("[sim] HOSE STOP (armed=false)");
                 return "MAIN|REPLY|HOSE|\"OK\"";
             }
 
-            // Optional: allow Main to force attach/detach
             if (line.startsWith("HOSE|SET|MAIN|")) {
                 String v = line.substring("HOSE|SET|MAIN|".length()).trim();
-                if ("1".equals(v)) { hoseAttached = true;  return "MAIN|REPLY|HOSE|\"OK\""; }
-                if ("0".equals(v)) { hoseAttached = false; return "MAIN|REPLY|HOSE|\"OK\""; }
+                if ("1".equals(v)) {
+                    hoseAttached = true;
+                    return "MAIN|REPLY|HOSE|\"OK\"";
+                }
+                if ("0".equals(v)) {
+                    hoseAttached = false;
+                    return "MAIN|REPLY|HOSE|\"OK\"";
+                }
                 return "MAIN|REPLY|HOSE|\"ERR:BAD_VALUE\"";
             }
 
             return "MAIN|REPLY|HOSE|\"ERR:UNKNOWN_COMMAND\"";
         }
     }
-}
+//------------------------------------------------------------------------------
+
+        // TODO: Implement below!
+
+        static final class PumpServer extends SimServer {
+            PumpServer(String id, int port) {
+                super(id, port);
+            }
+            @Override
+            String deviceName() {
+                return "PUMP";
+            }
+            @Override
+            String handle(String line) {
+
+                return line;
+            }
+        }
+
+        static final class PumpControlServer extends SimServer {
+            PumpControlServer(String id, int port) {
+                super(id, port);
+            }
+            @Override
+            String deviceName() {
+                return "PUMPCTRL";
+            }
+            @Override
+            String handle(String line) {
+
+                return line;
+            }
+        }
+
+        static final class FlowMeterServer extends SimServer {
+            FlowMeterServer(String id, int port) {
+                super(id, port);
+            }
+            @Override
+            String deviceName() {
+                return "FLOWMETER";
+            }
+            @Override
+            String handle(String line) {
+
+                return line;
+            }
+        }
+
+        static final class FlowMeterControlServer extends SimServer {
+            FlowMeterControlServer(String id, int port) {
+                super(id, port);
+            }
+            @Override
+            String deviceName() {
+                return "FLOWCTRL";
+            }
+            @Override
+            String handle(String line) {
+
+                return line;
+            }
+        }
+    }
