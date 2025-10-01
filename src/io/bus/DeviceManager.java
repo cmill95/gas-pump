@@ -1,8 +1,5 @@
 package io.bus;
 
-import devices.BinaryDevice;
-import devices.FlowMeter;
-import devices.Screen;
 import java.io.IOException;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -39,12 +36,6 @@ public final class DeviceManager implements AutoCloseable {
     {
         return linkFor(name);
     }
-
-    public Screen screen(String name) throws IOException { return new Screen(linkFor(name)); }
-
-    public BinaryDevice binary(String name) throws IOException { return new BinaryDevice(linkFor(name)); }
-
-    public FlowMeter flowMeter(String name) throws IOException { return new FlowMeter(linkFor(name)); }
 
     @Override public void close() throws IOException {
         IOException first = null;

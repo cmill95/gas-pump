@@ -1,6 +1,5 @@
 import io.bus.DeviceManager;
 import io.bus.DeviceLink;
-
 import java.io.IOException;
 import java.util.List;
 import java.time.Duration;
@@ -40,7 +39,7 @@ public class Main {
 
         synchronized boolean show(String payload) throws IOException {
             if (Objects.equals(last, payload)) return false;
-            screen.request("SCREEN|DISPLAY|MAIN|\"" + payload + "\"", java.time.Duration.ofSeconds(1));
+            screen.request("SCREEN|DISPLAY|MAIN|\"" + payload + "\"", Duration.ofSeconds(1));
             System.out.println("[screen] state -> " + payload);
             last = payload;
             return true;
@@ -67,10 +66,10 @@ public class Main {
             cancel("rearm:" + label);
             long id = ++seq;
             long firesAt = System.currentTimeMillis() + delayMs;
-            System.out.println(String.format("⏲ start #%d %s delay=%dms firesAt=%tT", id, label, delayMs, firesAt));
+            System.out.println(String.format("-> start #%d %s delay=%dms firesAt=%tT", id, label, delayMs, firesAt));
             pending = ses.schedule(() -> {
                 try {
-                    System.out.println(String.format("⏲ fire  #%d %s", id, label));
+                    System.out.println(String.format("-> fire  #%d %s", id, label));
                     resetSession.run();
                     sc.showWelcome();
                 } catch (IOException e) {
@@ -83,7 +82,7 @@ public class Main {
 
         synchronized void cancel(String reason) {
             if (pending != null) {
-                System.out.println("⏲ cancel " + reason);
+                System.out.println("-> cancel " + reason);
                 pending.cancel(false);
                 pending = null;
             }
@@ -98,18 +97,22 @@ public class Main {
                 new DeviceManager.Entry("screen",        "127.0.0.1", 5001, "screen-01",  "screen"),
                 new DeviceManager.Entry("cardreader",    "127.0.0.1", 5201, "cardr-01",   "cardreader"),
                 new DeviceManager.Entry("cardserver",    "127.0.0.1", 5301, "cards-01",   "cardserver"),
-                new DeviceManager.Entry("stationserver", "127.0.0.1", 5401, "station-01", "stationserver")
+                new DeviceManager.Entry("stationserver", "127.0.0.1", 5401, "station-01", "stationserver"),
+                new DeviceManager.Entry("hose",          "127.0.0.1", 5101, "hose-01",    "hose")
         );
 
         final int INACTIVITY_MS     = 30_000;
         final int DECLINE_DWELL_MS  = 2_000;
         final int CONFIRM_MS    = 10_000;
+        final int DETACH_TIMEOUT_MS = 30_000;
+        final int THANK_YOU_DWELL_MS = 2_000;
 
         try (DeviceManager dm = new DeviceManager(entries)) {
             DeviceLink screen   = dm.link("screen");
             DeviceLink reader   = dm.link("cardreader");
             DeviceLink cardSrv  = dm.link("cardserver");
             DeviceLink station  = dm.link("stationserver");
+            DeviceLink hose     = dm.link("hose");
 
             ScreenController sc = new ScreenController(screen);
             AuthTimeouts timeouts = new AuthTimeouts(sc, () -> {
@@ -140,7 +143,7 @@ public class Main {
 
                 if (auth != null && auth.contains("AUTH:YES")) {
 
-                    String list = station.request("STATIONSERVER|LIST|MAIN|None", java.time.Duration.ofSeconds(1));
+                    String list = station.request("STATIONSERVER|LIST|MAIN|None", Duration.ofSeconds(1));
                     String listPayload = extractQuoted(list);
                     String menuCsv     = afterColon(listPayload);
 
@@ -168,13 +171,68 @@ public class Main {
 
                     sc.show("FUEL_SELECTED:" + fuel);
 
-                    Thread.sleep(CONFIRM_MS);
+                    sc.show("ATTACH_HOSE");
+                    timeouts.start(INACTIVITY_MS, "attach-hose idle");
 
-                    sc.showWelcome();
+                    while (true) {
+                        String r = hose.request("HOSE|GET|MAIN|None", Duration.ofSeconds(1));
+                        String state = afterColon(extractQuoted(r)).trim(); // "0" or "1"
+                        if ("1".equals(state)) break;                       // attached
+                        sc.show("ATTACH_HOSE");                             // idempotent
+                        Thread.sleep(200);
+                    }
+
+                    timeouts.cancel("activity:hose_attached");
+
+// --- Arm fueling and show FUELING screen -----------------------------------
+                    hose.request("HOSE|START|MAIN|None", Duration.ofSeconds(1));
+                    sc.show("FUELING");
+
+// Optional: monitor detach/timeout while fueling
+                    long detachDeadline = Long.MAX_VALUE;
+                    while (true) {
+                        String rs = hose.request("HOSE|STATUS|MAIN|None", Duration.ofSeconds(1));
+                        String statusPayload = extractQuoted(rs);    // e.g., "STATE:1,ARMED:1,FULL:0"
+                        boolean isAttached = statusPayload.contains("STATE:1");
+                        boolean isArmed    = statusPayload.contains("ARMED:1");
+                        boolean isFull     = statusPayload.contains("FULL:1");
+
+// If someone disarmed externally, bail
+                        if (!isArmed) {
+                            sc.showWelcome();
+                            break;
+                        }
+
+// Full -> thank you, stop, return to welcome
+                        if (isFull) {
+                            sc.show("THANK_YOU");
+                            hose.request("HOSE|STOP|MAIN|None", Duration.ofSeconds(1));
+                            Thread.sleep(THANK_YOU_DWELL_MS);
+                            sc.showWelcome();
+                            break;
+                        }
+
+// Pause/resume handling on detach
+                        if (!isAttached) {
+                            if (detachDeadline == Long.MAX_VALUE) {
+                                detachDeadline = System.currentTimeMillis() + DETACH_TIMEOUT_MS;
+                            }
+                            if (System.currentTimeMillis() > detachDeadline) {
+                                hose.request("HOSE|STOP|MAIN|None", Duration.ofSeconds(1));
+                                sc.showWelcome();
+                                break;
+                            }
+                        } else {
+                            detachDeadline = Long.MAX_VALUE; // reattached -> resume
+                        }
+
+                        Thread.sleep(200);
+                    }
+
                 } else {
 
                     sc.show("AUTH_NO");
-                    System.out.println("[main] Declined — dwell " + (DECLINE_DWELL_MS / 1000.0) + "s, then reset.");
+                    System.out.println("[main] Declined - dwell " + (DECLINE_DWELL_MS / 1000.0) + "s, then reset.");
                     Thread.sleep(DECLINE_DWELL_MS);
                 }
             }

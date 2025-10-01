@@ -15,6 +15,7 @@ import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.stage.Stage;
 
+
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -22,6 +23,9 @@ import java.util.List;
 public class ScreenGUI extends Application {
     private DeviceManager dm;
     private DeviceLink screenCtrl;
+    private javafx.scene.layout.VBox fuelingRoot;
+    private javafx.scene.control.Label fuelingTitle;
+    private javafx.scene.control.ProgressBar fuelingBar;
 
     private double SCENE_WIDTH;
     private double SCENE_HEIGHT;
@@ -103,6 +107,31 @@ public class ScreenGUI extends Application {
         t.start();
     }
 
+    private void ensureFuelingView() {
+        if (fuelingRoot != null) return;
+        fuelingTitle = new javafx.scene.control.Label("Fueling…");
+        fuelingTitle.setStyle("-fx-font-size: 24px; -fx-font-weight: bold;");
+        fuelingBar = new javafx.scene.control.ProgressBar();
+        fuelingBar.setPrefWidth(260);
+        fuelingBar.setProgress(-1); // indeterminate by default
+        fuelingRoot = new javafx.scene.layout.VBox(12, fuelingTitle, fuelingBar);
+        fuelingRoot.setPadding(new javafx.geometry.Insets(16));
+    }
+
+    private void showFueling(Integer pct /* nullable */) {
+        ensureFuelingView();
+        if (pct == null) {
+            fuelingBar.setProgress(-1);
+            fuelingTitle.setText("Fueling…");
+        } else {
+            fuelingBar.setProgress(Math.max(0, Math.min(100, pct)) / 100.0);
+            fuelingTitle.setText("Fueling… " + pct + "%");
+        }
+        // TODO: swap into your main container, e.g.:
+        // root.setCenter(fuelingRoot);
+        // or cardsPane.getChildren().setAll(fuelingRoot);
+    }
+
     private void applyState(String state) {
 
         for (Row r : defaultSceneRows) r.clear();
@@ -172,6 +201,26 @@ public class ScreenGUI extends Application {
             int botRow = Math.min(2, defaultSceneRows.size() - 1);
             defaultSceneRows.get(topRow).showCombined("Fuel selected", 1, 0);
             defaultSceneRows.get(botRow).showCombined("Please attach hose to begin fueling", 1, 0);
+            for (Row r : defaultSceneRows) r.ensureCombinedLayout();
+            return;
+        }
+
+        if (state.equals("FUELING")) {
+            showFueling(null);
+            return;
+        }
+        if (state.startsWith("FUELING:")) {
+            try {
+                int pct = Integer.parseInt(state.substring("FUELING:".length()).trim());
+                showFueling(pct);
+            } catch (NumberFormatException ignored) {
+                showFueling(null);
+            }
+            return;
+        }
+
+        if (state.equals("THANK_YOU")) {
+            defaultSceneRows.get(0).showCombined("Thank You!", 2, 0);
             for (Row r : defaultSceneRows) r.ensureCombinedLayout();
             return;
         }
