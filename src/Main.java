@@ -26,6 +26,13 @@ public class Main {
         }
     }
 
+    private static void abortWithError(ScreenController sc, DeviceLink hose, String code) throws Exception {
+        try { hose.request("HOSE|STOP|MAIN|None", Duration.ofSeconds(1)); } catch (Exception ignore) {}
+        sc.show("ERROR:" + code);
+        Thread.sleep(2000); // dwell on ERROR
+        sc.showWelcome();
+    }
+
     private static String extractQuoted(String s) {
         if (s == null) return "";
         int q1 = s.indexOf('"');
@@ -154,6 +161,20 @@ public class Main {
                 String cc         = afterColon(tapPayload).trim();
                 System.out.println("[main] CC digit = " + cc);
 
+                int ccVal;
+
+                try {
+                    ccVal = Integer.parseInt(cc);
+                } catch (NumberFormatException ex) {
+                    abortWithError(sc, hose, "BAD_TAP");
+                    continue;
+                }
+                //ccVal = -1; // ERROR TESTING
+                if (ccVal < 0) {
+                    abortWithError(sc, hose, "NEG_TAP");
+                    continue;
+                }
+
                 String auth = cardSrv.request("CARDSERVER|AUTH|MAIN|" + cc, Duration.ofSeconds(1));
                 System.out.println("[main] " + auth);
 
@@ -210,8 +231,33 @@ public class Main {
                     double curGal = parseField(hsp, "CUR");
                     double remainingTargetGal = Math.max(0.0, capGal - curGal); // how many gallons *this* session can deliver
 
+                    //capGal = -1; // ERROR TESTING
+                    //curGal = -1; // ERROR TESTING
+                    //curGal = 10; capGal = 20; // ERROR TESTING
+
+                    if (capGal < 0 || curGal < 0) {
+                        abortWithError(sc, hose, "BAD_TANK");
+                        continue;
+                    }
+                    if (curGal > capGal) {
+                        abortWithError(sc, hose, "OVERFILL");
+                        continue;
+                    }
+
                     String pr = station.request("STATIONSERVER|GETPRICE|MAIN|" + fuel, Duration.ofSeconds(1));
                     double pricePerGal = parseField(extractQuoted(pr), "PRICE");
+
+                    //pricePerGal = -1; // ERROR TESTING
+                    //pricePerGal = 0; // ERROR TESTING
+
+                    if (pricePerGal < 0) {
+                        abortWithError(sc, hose, "NEG_PRICE");
+                        continue;
+                    }
+                    if (pricePerGal == 0 || pricePerGal < 0.01) {
+                        abortWithError(sc, hose, "BAD_PRICE");
+                        continue;
+                    }
 
                     int kEst = (capGal > 0.0) ? (int)Math.floor((curGal / capGal) * 11.0) : 0;
                     kEst = Math.max(0, Math.min(10, kEst));
@@ -240,7 +286,16 @@ public class Main {
                         lastTick = now;
 
                         if (isAttached && !isFull) {
+
                             dispensedGal += gps * dt;
+
+                            //dispensedGal = -1; // ERROR TESTING
+
+                            if (dispensedGal < 0) {
+                                abortWithError(sc, hose, "NEG_GAL");
+                                break;
+                            }
+
                             if (dispensedGal >= remainingTargetGal) {
                                 dispensedGal = remainingTargetGal;
                                 // We hit the computed target; treat as complete.

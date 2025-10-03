@@ -122,6 +122,14 @@ public class ScreenGUI extends Application {
     private void applyState(String state) {
         for (Row r : defaultSceneRows) r.clear();
 
+        if (state.startsWith("ERROR:")) {
+            String reason = state.substring("ERROR:".length());
+            defaultSceneRows.get(0).showCombined("ERROR", 2, 0);
+            defaultSceneRows.get(1).showCombined(reason, 1, 0);
+            for (Row r : defaultSceneRows) r.ensureCombinedLayout();
+            return;
+        }
+
         if (state.startsWith("FUELING_NUM:")) {
             String body = state.substring("FUELING_NUM:".length()).trim();
             double gallons = 0.0, dollars = 0.0;
