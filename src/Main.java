@@ -136,9 +136,10 @@ public class Main {
 
             while (true) {
 
-                System.out.println("[main] STATUS READY -> Screen");
+                System.out.println("[main] initializing Screen...");
                 String allow = screen.request("SCREEN|READY|MAIN|None", Duration.ofSeconds(1));
-                System.out.println("[main] Screen replied: " + allow);
+                System.out.println("[screen] replied: " + allow);
+                System.out.println("[main] we are ready for payment, show WELCOME screen");
                 sc.showWelcome();
 
                 System.out.println("[main] Waiting for CARD_TAP...");

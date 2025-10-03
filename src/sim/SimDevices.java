@@ -7,11 +7,11 @@ import java.util.Random;
 
 public final class SimDevices {
 
-    private static volatile double hoseTankCapGal = 0.0;   // tankSize
-    private static volatile double hoseTankCurGal = 0.0;   // currentTankFill (before this session)
+    private static volatile double hoseTankCapGal = 0.0;
+    private static volatile double hoseTankCurGal = 0.0;
     private static volatile boolean hoseAttached = false;
     private static volatile boolean hoseFull = false;
-    private static volatile boolean hoseArmed    = false; // NEW: controlled by Main
+    private static volatile boolean hoseArmed    = false;
     static volatile String screenState = "WELCOME";
     static volatile String pendingGrade = null;
     static volatile String pendingTap = null;
@@ -32,12 +32,12 @@ public final class SimDevices {
         chooseAvailable3();
 
         System.out.println("[sim] Started. Screen @" + screenPort +
-                ", Screen-CTRL @" + screenCtrlPort +
                 ", CardReader @" + cardReaderPort +
                 ", CardServer @" + cardServerPort +
-                ", CardReader-CTRL @" + cardReaderCtl +
                 ", StationServer @" + stationPort +
-                ", Hose @" + hosePort);
+                ", Hose @" + hosePort +
+                ", Pump @" + pumpPort +
+                ", FlowMeter @" + flowMeterPort);
 
         new Thread(() -> new ScreenServer("screen-01", screenPort).serve()).start();
         new Thread(() -> new ScreenControlServer("screen-ctrl", screenCtrlPort).serve()).start();
@@ -107,21 +107,21 @@ public final class SimDevices {
                 if (!"WELCOME".equals(screenState)) {
                     screenState = "WELCOME";
                     pendingGrade = null;
-                    System.out.println("[sim] SCREEN state -> " + screenState + " (pendingGrade cleared)");
+                    System.out.println("[sim] SCREEN state -> " + screenState);
                 }
                 return "MAIN|REPLY|SCREEN|\"OK\"";
             }
             if (line.equals("SCREEN|DISPLAY|MAIN|\"THANK_YOU\"")) {
                 if (!"THANK_YOU".equals(screenState)) {
                     screenState = "THANK_YOU";
-                    System.out.println("[sim] SCREEN -> THANK_YOU");
+                    System.out.println("[sim] SCREEN state -> "+ screenState);
                 }
                 return "MAIN|REPLY|SCREEN|\"OK\"";
             }
             if (line.equals("SCREEN|DISPLAY|MAIN|\"FUELING\"")) {
                 if (!"FUELING".equals(screenState)) {
                     screenState = "FUELING";
-                    System.out.println("[sim] SCREEN -> FUELING");
+                    System.out.println("[sim] SCREEN state -> "+ screenState);
                 }
                 return "MAIN|REPLY|SCREEN|\"OK\"";
             }
@@ -129,7 +129,7 @@ public final class SimDevices {
                 String payload = line.substring("SCREEN|DISPLAY|MAIN|\"".length(), line.length() - 1);
                 if (!payload.equals(screenState)) {
                     screenState = payload;
-                    System.out.println("[sim] SCREEN -> " + payload);
+                    System.out.println("[sim] SCREEN state -> "+ screenState);
                 }
                 return "MAIN|REPLY|SCREEN|\"OK\"";
             }

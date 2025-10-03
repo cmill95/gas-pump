@@ -34,24 +34,21 @@ public class CardReaderGUI extends Application {
 
     @Override
     public void start(Stage stage) throws Exception {
-
         var entries = List.of(
                 new DeviceManager.Entry("cardreader-ctrl", "127.0.0.1", 5221, "cardr-ctrl", "cardreader")
         );
         dm = new DeviceManager(entries);
         reader = dm.link("cardreader-ctrl");
 
-        imgIdle0   = new Image(getClass().getResourceAsStream("/images/cardReader/CR-0.png"));
-        imgIdle1   = new Image(getClass().getResourceAsStream("/images/cardReader/CR-1.png"));
-        imgAccepted= new Image(getClass().getResourceAsStream("/images/cardReader/CR-2.png"));
-        imgDeclined= new Image(getClass().getResourceAsStream("/images/cardReader/CR-3.png"));
+        imgIdle0    = new Image(getClass().getResourceAsStream("/images/cardReader/CR-0.png"));
+        imgIdle1    = new Image(getClass().getResourceAsStream("/images/cardReader/CR-1.png"));
+        imgAccepted = new Image(getClass().getResourceAsStream("/images/cardReader/CR-2.png"));
+        imgDeclined = new Image(getClass().getResourceAsStream("/images/cardReader/CR-3.png"));
 
         cardView = new ImageView(imgIdle0);
-        cardView.setOnMouseClicked(e -> {
-            cardRead();
-        });
         cardView.setPreserveRatio(true);
         cardView.setFitWidth(260);
+        cardView.setOnMouseClicked(e -> cardRead());
 
         status = new Label("Ready. Tap to send a random digit (0–9).");
 
@@ -85,41 +82,37 @@ public class CardReaderGUI extends Application {
         if (idleFlash != null) idleFlash.stop();
     }
 
-    // The card image was pressed, simulates a card read
     private void cardRead() {
+        Image current = cardView.getImage();
+        if (current != imgIdle0 && current != imgIdle1) return;
 
-        if (cardView.getImage().equals(imgIdle0) || cardView.getImage().equals(imgIdle1)) {
-
-            int d = ThreadLocalRandom.current().nextInt(10);
-
-            String ok;
-            try {
-                ok = reader.request("CARDREADER|DEVCTL|MAIN|" + d, java.time.Duration.ofSeconds(1));
-            } catch (Exception e) {
-                ok = "NO REPLY";
-            }
-
-            ScaleTransition st = new ScaleTransition(Duration.millis(150), cardView);
-            st.setFromX(1.0); st.setFromY(1.0);
-            st.setToX(0.9);   st.setToY(0.9);
-            st.setAutoReverse(true);
-            st.setCycleCount(2);
-            st.play();
-
-            stopIdle();
-            boolean accepted = (d % 2 == 0);
-            cardView.setImage(accepted ? imgAccepted : imgDeclined);
-            status.setText("Queued tap: " + d + " (server replied: " + ok + ")"
-                    + (accepted ? "  → authorized" : "  → declined"));
-
-            PauseTransition back = new PauseTransition(Duration.millis(1200));
-            back.setOnFinished(e -> {
-                cardView.setImage(imgIdle0);
-                status.setText("Ready. Tap to send a random digit (0–9).");
-                startIdle();
-            });
-            back.play();
+        int d = ThreadLocalRandom.current().nextInt(10);
+        String ok;
+        try {
+            ok = reader.request("CARDREADER|DEVCTL|MAIN|" + d, java.time.Duration.ofSeconds(1));
+        } catch (Exception e) {
+            ok = "NO REPLY";
         }
+
+        ScaleTransition st = new ScaleTransition(Duration.millis(150), cardView);
+        st.setFromX(1.0); st.setFromY(1.0);
+        st.setToX(0.9);   st.setToY(0.9);
+        st.setAutoReverse(true);
+        st.setCycleCount(2);
+        st.play();
+
+        stopIdle();
+        boolean accepted = (d % 2 == 0);
+        cardView.setImage(accepted ? imgAccepted : imgDeclined);
+        status.setText("Queued tap: " + d + " (server replied: " + ok + ")" + (accepted ? "  → authorized" : "  → declined"));
+
+        PauseTransition back = new PauseTransition(Duration.millis(1200));
+        back.setOnFinished(e -> {
+            cardView.setImage(imgIdle0);
+            status.setText("Ready. Tap to send a random digit (0–9).");
+            startIdle();
+        });
+        back.play();
     }
 
     @Override
