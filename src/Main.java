@@ -13,16 +13,16 @@ public class Main {
 
 
     // ---- Safe helpers ------------------------------------------------------
-    private static double parseField(String payload, String key, double def) {
+    private static double parseField(String payload, String key) {
         try {
             int i = payload.indexOf(key + ":");
-            if (i < 0) return def;
+            if (i < 0) return 0.0;
             int start = i + key.length() + 1;
             int end = payload.indexOf(',', start);
             String num = (end < 0) ? payload.substring(start) : payload.substring(start, end);
             return Double.parseDouble(num.trim());
         } catch (Exception e) {
-            return def;
+            return 0.0;
         }
     }
 
@@ -50,12 +50,11 @@ public class Main {
         private final DeviceLink screen;
         private String last;
 
-        synchronized boolean show(String payload) throws IOException {
-            if (Objects.equals(last, payload)) return false;
+        synchronized void show(String payload) throws IOException {
+            if (Objects.equals(last, payload)) return;
             screen.request("SCREEN|DISPLAY|MAIN|\"" + payload + "\"", Duration.ofSeconds(1));
             System.out.println("[screen] state -> " + payload);
             last = payload;
-            return true;
         }
 
         synchronized void showWelcome() throws IOException { show("WELCOME"); }
@@ -75,14 +74,14 @@ public class Main {
             this.resetSession = resetSession;
         }
 
-        synchronized void start(long delayMs, String label) {
+        synchronized void start(String label) {
             cancel("rearm:" + label);
             long id = ++seq;
-            long firesAt = System.currentTimeMillis() + delayMs;
-            System.out.println(String.format("-> start #%d %s delay=%dms firesAt=%tT", id, label, delayMs, firesAt));
+            long firesAt = System.currentTimeMillis() + (long) 30000;
+            System.out.printf("-> start #%d %s delay=%dms firesAt=%tT%n", id, label, (long) 30000, firesAt);
             pending = ses.schedule(() -> {
                 try {
-                    System.out.println(String.format("-> fire  #%d %s", id, label));
+                    System.out.printf("-> fire  #%d %s%n", id, label);
                     resetSession.run();
                     sc.showWelcome();
                 } catch (IOException e) {
@@ -90,7 +89,7 @@ public class Main {
                 } finally {
                     clear();
                 }
-            }, delayMs, TimeUnit.MILLISECONDS);
+            }, 30000, TimeUnit.MILLISECONDS);
         }
 
         synchronized void cancel(String reason) {
@@ -146,7 +145,7 @@ public class Main {
                 String tap;
                 while (true) {
                     tap = reader.request("CARDREADER|CHECK|MAIN|None", Duration.ofSeconds(1));
-                    if (tap != null && tap.startsWith("MAIN|EVENT|CARDREADER|\"CARDTAP:")) break;
+                    if (tap.startsWith("MAIN|EVENT|CARDREADER|\"CARDTAP:")) break;
                     Thread.sleep(250);
                 }
                 System.out.println("[main] Tap raw: " + tap);
@@ -158,21 +157,21 @@ public class Main {
                 String auth = cardSrv.request("CARDSERVER|AUTH|MAIN|" + cc, Duration.ofSeconds(1));
                 System.out.println("[main] " + auth);
 
-                if (auth != null && auth.contains("AUTH:YES")) {
+                if (auth.contains("AUTH:YES")) {
 
                     String list = station.request("STATIONSERVER|LIST|MAIN|None", Duration.ofSeconds(1));
                     String listPayload = extractQuoted(list);
                     String menuCsv     = afterColon(listPayload);
 
                     sc.show("GRADE_MENU:" + menuCsv);
-                    timeouts.start(INACTIVITY_MS, "post-auth idle");
+                    timeouts.start("post-auth idle");
 
                     final long deadline = System.currentTimeMillis() + INACTIVITY_MS;
-                    String sel = null;
+                    String sel;
                     boolean timedOut = false;
                     while (true) {
                         sel = screen.request("SCREEN|CHECK|MAIN|None", java.time.Duration.ofSeconds(1));
-                        if (sel != null && sel.startsWith("MAIN|EVENT|SCREEN|\"GRADE_SELECTED:")) break;
+                        if (sel.startsWith("MAIN|EVENT|SCREEN|\"GRADE_SELECTED:")) break;
                         if (System.currentTimeMillis() > deadline) { timedOut = true; break; }
                         Thread.sleep(200);
                     }
@@ -189,7 +188,7 @@ public class Main {
                     sc.show("FUEL_SELECTED:" + fuel);
 
                     sc.show("ATTACH_HOSE");
-                    timeouts.start(INACTIVITY_MS, "attach-hose idle");
+                    timeouts.start("attach-hose idle");
 
                     while (true) {
                         String r = hose.request("HOSE|GET|MAIN|None", Duration.ofSeconds(1));
@@ -207,12 +206,12 @@ public class Main {
                     String hs = hose.request("HOSE|STATUS|MAIN|None", Duration.ofSeconds(1));
                     String hsp = extractQuoted(hs); // e.g., STATE:1,ARMED:1,FULL:0,CAP:15.000,CUR:3.200
 
-                    double capGal = parseField(hsp, "CAP", 0.0);
-                    double curGal = parseField(hsp, "CUR", 0.0);
+                    double capGal = parseField(hsp, "CAP");
+                    double curGal = parseField(hsp, "CUR");
                     double remainingTargetGal = Math.max(0.0, capGal - curGal); // how many gallons *this* session can deliver
 
                     String pr = station.request("STATIONSERVER|GETPRICE|MAIN|" + fuel, Duration.ofSeconds(1));
-                    double pricePerGal = parseField(extractQuoted(pr), "PRICE", 0.0);
+                    double pricePerGal = parseField(extractQuoted(pr), "PRICE");
 
                     int kEst = (capGal > 0.0) ? (int)Math.floor((curGal / capGal) * 11.0) : 0;
                     kEst = Math.max(0, Math.min(10, kEst));
@@ -267,7 +266,6 @@ public class Main {
                             sc.show("THANK_YOU_NUM:" + galsFmt + "," + usdFmt);
 
                             // 2) Stop devices
-                            try { pump.request("PUMP|STOP|MAIN|None", Duration.ofSeconds(1)); } catch (Exception ignore) {}
                             hose.request("HOSE|STOP|MAIN|None", Duration.ofSeconds(1));
 
                             // 3) Linger 5s on the receipt-style screen
@@ -295,7 +293,6 @@ public class Main {
                     }
 
                 } else {
-
                     sc.show("AUTH_NO");
                     System.out.println("[main] Declined - dwell " + (DECLINE_DWELL_MS / 1000.0) + "s, then reset.");
                     Thread.sleep(DECLINE_DWELL_MS);
