@@ -272,6 +272,11 @@ public class HoseGUI extends Application {
         double percentFull = currentTankFill / tankSize;
         fillIndex = Math.max(0, Math.min(10, (int) Math.floor(percentFull * 11)));
         changeImage(fillIndex);
+        try {
+            // Tell SimDevices the tank meta so Main can compute how many gallons remain
+            hoseCtrl.request("HOSECTRL|SETCAP|MAIN|" + String.format(java.util.Locale.US, "%.3f", tankSize), java.time.Duration.ofSeconds(1));
+            hoseCtrl.request("HOSECTRL|SETCUR|MAIN|" + String.format(java.util.Locale.US, "%.3f", currentTankFill), java.time.Duration.ofSeconds(1));
+        } catch (Exception ignored) {}
     }
 
     private void changeImage(int number) {

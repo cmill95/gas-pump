@@ -13,6 +13,19 @@ public class Main {
 
 
     // ---- Safe helpers ------------------------------------------------------
+    private static double parseField(String payload, String key, double def) {
+        try {
+            int i = payload.indexOf(key + ":");
+            if (i < 0) return def;
+            int start = i + key.length() + 1;
+            int end = payload.indexOf(',', start);
+            String num = (end < 0) ? payload.substring(start) : payload.substring(start, end);
+            return Double.parseDouble(num.trim());
+        } catch (Exception e) {
+            return def;
+        }
+    }
+
     private static String extractQuoted(String s) {
         if (s == null) return "";
         int q1 = s.indexOf('"');
@@ -106,7 +119,7 @@ public class Main {
         final int INACTIVITY_MS     = 30_000;
         final int DECLINE_DWELL_MS  = 2_000;
         final int DETACH_TIMEOUT_MS = 30_000;
-        final int THANK_YOU_DWELL_MS = 2_000;
+        final int THANK_YOU_DWELL_MS = 5_000;
 
         try (DeviceManager dm = new DeviceManager(entries)) {
             DeviceLink screen   = dm.link("screen");
@@ -190,7 +203,26 @@ public class Main {
                     hose.request("HOSE|START|MAIN|None", Duration.ofSeconds(1));
                     sc.show("FUELING");
 
+                    String hs = hose.request("HOSE|STATUS|MAIN|None", Duration.ofSeconds(1));
+                    String hsp = extractQuoted(hs); // e.g., STATE:1,ARMED:1,FULL:0,CAP:15.000,CUR:3.200
+
+                    double capGal = parseField(hsp, "CAP", 0.0);
+                    double curGal = parseField(hsp, "CUR", 0.0);
+                    double remainingTargetGal = Math.max(0.0, capGal - curGal); // how many gallons *this* session can deliver
+
+                    String pr = station.request("STATIONSERVER|GETPRICE|MAIN|" + fuel, Duration.ofSeconds(1));
+                    double pricePerGal = parseField(extractQuoted(pr), "PRICE", 0.0);
+
+                    int kEst = (capGal > 0.0) ? (int)Math.floor((curGal / capGal) * 11.0) : 0;
+                    kEst = Math.max(0, Math.min(10, kEst));
+                    int framesRemaining = Math.max(1, 10 - kEst);           // seconds HoseGUI needs (1 frame/sec)
+                    double gps = remainingTargetGal / framesRemaining;
+
                     long detachDeadline = Long.MAX_VALUE;
+
+                    long lastTick = System.currentTimeMillis();
+                    double dispensedGal = 0.0;
+
                     while (true) {
                         String rs = hose.request("HOSE|STATUS|MAIN|None", Duration.ofSeconds(1));
                         String statusPayload = extractQuoted(rs);
@@ -203,10 +235,44 @@ public class Main {
                             break;
                         }
 
+                        long now = System.currentTimeMillis();
+                        double dt = (now - lastTick) / 1000.0;
+                        lastTick = now;
+
+                        if (isAttached && !isFull) {
+                            dispensedGal += gps * dt;
+                            if (dispensedGal >= remainingTargetGal) {
+                                dispensedGal = remainingTargetGal;
+                                // We hit the computed target; treat as complete.
+                                isFull = true;
+                            }
+                        }
+
+                        double galShown = Math.min(dispensedGal, remainingTargetGal);
+                        double usdShown = galShown * pricePerGal;
+                        String galsFmt = String.format(java.util.Locale.US, "%.3f", galShown);
+                        String usdFmt  = String.format(java.util.Locale.US, "%.2f", usdShown);
+                        sc.show("FUELING_NUM:" + galsFmt + "," + usdFmt);
+
                         if (isFull) {
-                            sc.show("THANK_YOU");
+                            // Compute/Clamp the final numbers you want to show
+                            double finalGallons = Math.min(dispensedGal, remainingTargetGal); // or whatever your accumulator is named
+                            double finalDollars = finalGallons * pricePerGal;
+
+                            galsFmt = String.format(java.util.Locale.US, "%.3f", finalGallons);
+                            usdFmt  = String.format(java.util.Locale.US, "%.2f",  finalDollars);
+
+                            // 1) Show THANK_YOU with the final numbers
+                            sc.show("THANK_YOU_NUM:" + galsFmt + "," + usdFmt);
+
+                            // 2) Stop devices
+                            try { pump.request("PUMP|STOP|MAIN|None", Duration.ofSeconds(1)); } catch (Exception ignore) {}
                             hose.request("HOSE|STOP|MAIN|None", Duration.ofSeconds(1));
+
+                            // 3) Linger 5s on the receipt-style screen
                             Thread.sleep(THANK_YOU_DWELL_MS);
+
+                            // 4) Back to welcome
                             sc.showWelcome();
                             break;
                         }
@@ -221,7 +287,7 @@ public class Main {
                                 break;
                             }
                         } else {
-                            detachDeadline = Long.MAX_VALUE;
+                            detachDeadline = Long.MAX_VALUE; // resume window
                         }
 
                         Thread.sleep(200);

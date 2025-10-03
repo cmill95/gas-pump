@@ -7,6 +7,8 @@ import java.util.Random;
 
 public final class SimDevices {
 
+    private static volatile double hoseTankCapGal = 0.0;   // tankSize
+    private static volatile double hoseTankCurGal = 0.0;   // currentTankFill (before this session)
     private static volatile boolean hoseAttached = false;
     private static volatile boolean hoseFull = false;
     private static volatile boolean hoseArmed    = false; // NEW: controlled by Main
@@ -346,6 +348,22 @@ public final class SimDevices {
                 System.out.println("[sim] HOSECTRL FULL -> false");
                 return "MAIN|REPLY|HOSECTRL|\"OK\"";
             }
+            if (line.startsWith("HOSECTRL|SETCAP|MAIN|")) {
+                try {
+                    hoseTankCapGal = Double.parseDouble(line.substring("HOSECTRL|SETCAP|MAIN|".length()).trim());
+                    return "MAIN|REPLY|HOSECTRL|\"OK\"";
+                } catch (Exception e) {
+                    return "MAIN|REPLY|HOSECTRL|\"ERR:BAD_CAP\"";
+                }
+            }
+            if (line.startsWith("HOSECTRL|SETCUR|MAIN|")) {
+                try {
+                    hoseTankCurGal = Double.parseDouble(line.substring("HOSECTRL|SETCUR|MAIN|".length()).trim());
+                    return "MAIN|REPLY|HOSECTRL|\"OK\"";
+                } catch (Exception e) {
+                    return "MAIN|REPLY|HOSECTRL|\"ERR:BAD_CUR\"";
+                }
+            }
             return "MAIN|REPLY|HOSECTRL|\"ERR:UNKNOWN_COMMAND\"";
         }
     }
@@ -364,22 +382,23 @@ public final class SimDevices {
             if (line.equals("HOSE|GET|MAIN|None")) {
                 return "MAIN|REPLY|HOSE|\"STATE:" + (hoseAttached ? "1" : "0") + "\"";
             }
-
             if (line.equals("HOSE|STATUS|MAIN|None")) {
                 return "MAIN|REPLY|HOSE|\"STATE:" + (hoseAttached ? "1" : "0")
                         + ",ARMED:" + (hoseArmed ? "1" : "0")
-                        + ",FULL:" + (hoseFull ? "1" : "0") + "\"";
+                        + ",FULL:"  + (hoseFull   ? "1" : "0")
+                        + ",CAP:"   + String.format(java.util.Locale.US, "%.3f", hoseTankCapGal)
+                        + ",CUR:"   + String.format(java.util.Locale.US, "%.3f", hoseTankCurGal)
+                        + "\"";
             }
-
             if (line.equals("HOSE|START|MAIN|None")) {
                 hoseArmed = true;
-                System.out.println("[sim] HOSE START (armed=true)");
+                hoseFull  = false;
+                System.out.println("[sim] HOSE START (armed=true, full=false)");
                 return "MAIN|REPLY|HOSE|\"OK\"";
             }
 
             if (line.equals("HOSE|STOP|MAIN|None")) {
                 hoseArmed = false;
-                hoseFull = false;
                 System.out.println("[sim] HOSE STOP (armed=false)");
                 return "MAIN|REPLY|HOSE|\"OK\"";
             }

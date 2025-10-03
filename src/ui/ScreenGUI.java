@@ -14,6 +14,7 @@ import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.stage.Stage;
+import java.util.Locale;
 
 
 import java.time.Duration;
@@ -132,6 +133,50 @@ public class ScreenGUI extends Application {
     private void applyState(String state) {
 
         for (Row r : defaultSceneRows) r.clear();
+
+        if (state.startsWith("FUELING_NUM:")) {
+            String body = state.substring("FUELING_NUM:".length()).trim(); // "x.xxx,y.yy"
+            double gallons = 0.0, dollars = 0.0;
+            try {
+                String[] parts = body.split(",");
+                if (parts.length >= 1) gallons = Double.parseDouble(parts[0].trim());
+                if (parts.length >= 2) dollars = Double.parseDouble(parts[1].trim());
+            } catch (Exception ignored) {}
+
+            int topRow = Math.min(1, defaultSceneRows.size() - 1);
+            int botRow = Math.min(2, defaultSceneRows.size() - 1);
+
+            defaultSceneRows.get(topRow).showCombined(
+                    String.format(java.util.Locale.US, "Gallons: %.3f", gallons), 1, 0);
+            defaultSceneRows.get(botRow).showCombined(
+                    String.format(java.util.Locale.US, "Total: $%.2f", dollars), 1, 0);
+
+            for (Row r : defaultSceneRows) r.ensureCombinedLayout();
+            return;
+        }
+
+        if (state.startsWith("THANK_YOU_NUM:")) {
+            String body = state.substring("THANK_YOU_NUM:".length()).trim(); // "x.xxx,y.yy"
+            double gallons = 0.0, dollars = 0.0;
+            try {
+                String[] parts = body.split(",");
+                if (parts.length >= 1) gallons = Double.parseDouble(parts[0].trim());
+                if (parts.length >= 2) dollars = Double.parseDouble(parts[1].trim());
+            } catch (Exception ignored) {}
+
+            int row0 = 0;
+            int row1 = Math.min(1, defaultSceneRows.size() - 1);
+            int row2 = Math.min(2, defaultSceneRows.size() - 1);
+
+            defaultSceneRows.get(row0).showCombined("Thank You!", 2, 0);
+            defaultSceneRows.get(row1).showCombined(
+                    String.format(java.util.Locale.US, "Gallons: %.3f", gallons), 1, 0);
+            defaultSceneRows.get(row2).showCombined(
+                    String.format(java.util.Locale.US, "Total: $%.2f", dollars), 1, 0);
+
+            for (Row r : defaultSceneRows) r.ensureCombinedLayout();
+            return;
+        }
 
         if (state.startsWith("GRADE_MENU:")) {
             String csv = state.substring("GRADE_MENU:".length());
