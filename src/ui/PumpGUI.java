@@ -14,168 +14,184 @@ import javafx.scene.layout.BorderPane;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 
+import java.io.InputStream;
+import java.lang.reflect.Method;
 
-public final class PumpGUI extends Application {
+/**
+ * Minimal animation logic:
+ *   not attached -> P-0.png
+ *   attached     -> toggle P-1-0-0.png and P-1-0-1.png
+ *
+ * Attempts to read "attached" from existing code (unchanged):
+ *   - ui.HoseGUI.isAttached() or getAttached()
+ *   - sim.SimDevices.isHoseAttached() or getHoseAttached()
+ *
+ * If none found, press 'A' to toggle locally for testing.
+ */
+public class PumpGUI extends Application {
 
-    // ---- CONFIG ----
-    private static final boolean SAME_PROCESS = true;
-    private static final long    PERIOD_MS     = 350;
-
-    // Device-poll mode config (only used if SAME_PROCESS = false)
-    private static final String  HOSE_ENTRY_NAME = "hose-sensor";
-    private static final String  HOST = "127.0.0.1";
-    private static final int     PORT = 5101;
-    private static final String  DEVICE_ID = "hose-01";
-    private static final String  KIND = "binary";
-
-    // ---- images ----
+    // --- image names (under resources /images/pump/) ---
     private static final String BASE = "/images/pump/";
-    private static final String IMG_OFF = "P-0.png";
-    private static final String IMG_UPPER = "P-1-1-0.png";
-    private static final String IMG_LOWER = "P-1-1-1.png";
+    private static final String IMG_OFF   = "P-0.png";
+    private static final String IMG_A0    = "P-1-0-0.png";
+    private static final String IMG_A1    = "P-1-0-1.png";
 
-    // ---- shared bus for same-process wiring (HoseGUI updates this) ----
-    public static final class Bus {
-        private static final BooleanProperty hoseAttached = new SimpleBooleanProperty(false);
-        public static BooleanProperty hoseAttachedProperty() { return hoseAttached; }
-        public static boolean isHoseAttached() { return hoseAttached.get(); }
-        public static void setHoseAttached(boolean v) { hoseAttached.set(v); }
-    }
-
-    private Image imgOff, imgUpper, imgLower;
+    // --- UI ---
     private ImageView view;
-    private boolean showUpper = true;
+    private Image imgOff, imgA0, imgA1;
 
-    // device-poll state (reflection to avoid compile-time dependency)
-    private Object deviceManager;
-    private Object hoseDevice;
-
+    // --- animation ---
     private Timeline loop;
+    private boolean flip = false;
+
+    // --- attached state (observable) ---
+    private final BooleanProperty attached = new SimpleBooleanProperty(false);
+
+    // --- reflection hooks (none of your other files need to change) ---
+    private Method mIsAttached;   // static boolean isAttached() / getAttached() / isHoseAttached()/getHoseAttached()
+    private Class<?> providerClass;
 
     @Override
     public void start(Stage stage) {
-        // load images
-        imgOff   = load(IMG_OFF);
-        imgUpper = load(IMG_UPPER);
-        imgLower = load(IMG_LOWER);
+        System.out.println("[PumpGUI] Launching");
 
-        view = new ImageView(imgUpper);
+        // Load images
+        imgOff = load(BASE + IMG_OFF);
+        imgA0  = load(BASE + IMG_A0);
+        imgA1  = load(BASE + IMG_A1);
+        if (imgOff == null) warnMissing(IMG_OFF);
+        if (imgA0  == null) warnMissing(IMG_A0);
+        if (imgA1  == null) warnMissing(IMG_A1);
+
+        view = new ImageView(imgOff);
         view.setPreserveRatio(true);
-        view.setFitWidth(360);
+        view.setFitHeight(420);
 
-        var root = new BorderPane(view);
+        BorderPane root = new BorderPane(view);
         BorderPane.setAlignment(view, Pos.CENTER);
 
-        stage.setTitle("Pump");
-        stage.setScene(new Scene(root, 420, 320));
+        Scene scene = new Scene(root, 520, 480);
+        stage.setTitle("PumpGUI");
+        stage.setScene(scene);
         stage.show();
 
-        if (!SAME_PROCESS) {
-            initDevicePoll();
-        } else {
-            // immediate refresh when HoseGUI flips the bus
-            Bus.hoseAttachedProperty().addListener((obs, oldV, newV) -> refreshNow());
-        }
+        // Try to wire to your existing code (unchanged)
+        wireAttachmentGetter();
 
-        // timer loop
-        loop = new Timeline(new KeyFrame(Duration.millis(PERIOD_MS), e -> tick()));
+        // Poll attached flag & animate
+        loop = new Timeline(new KeyFrame(Duration.millis(180), e -> tick()));
         loop.setCycleCount(Animation.INDEFINITE);
         loop.play();
 
-        refreshNow(); // initial paint
+        // Test toggle if we couldn't find a provider
+        scene.setOnKeyPressed(ev -> {
+            switch (ev.getCode()) {
+                case A -> {
+                    if (mIsAttached == null) {
+                        attached.set(!attached.get());
+                        System.out.println("[PumpGUI] (TEST) attached=" + attached.get());
+                        // force refresh now instead of waiting for next tick
+                        tick();
+                    }
+                }
+                default -> {}
+            }
+        });
+
+        
+        tick();
     }
 
     private void tick() {
-        boolean attached = getAttached();
-        if (!attached) {
-            if (view.getImage() != imgUpper) view.setImage(imgLower);
-            if (view.getImage() != imgLower) view.setImage(imgUpper);
-
-            return;
+        if (mIsAttached != null) {
+            try {
+                Object v = mIsAttached.invoke(null);
+                if (v instanceof Boolean b) {
+                    attached.set(b);
+                } else {
+                    attached.set(false);
+                }
+            } catch (Throwable t) {
+                System.out.println("[PumpGUI] Provider error; disabling: " + t);
+                mIsAttached = null;
+            }
         }
-        // toggle upper/lower while attached
-        showUpper = !showUpper;
-        view.setImage(showUpper ? imgUpper : imgLower);
-    }
 
-    private void refreshNow() {
-        if (!getAttached()) {
-            view.setImage(imgUpper);
+        // Render based on attached
+        if (!attached.get()) {
+            // not attached -> P-0.png
+            if (imgOff != null) view.setImage(imgOff);
         } else {
-            view.setImage(showUpper ? imgUpper : imgLower);
+            // attached -> toggle between two frames
+            flip = !flip;
+            if (flip) {
+                if (imgA0 != null) view.setImage(imgA0);
+            } else {
+                if (imgA1 != null) view.setImage(imgA1);
+            }
         }
     }
 
-    private boolean getAttached() {
-        if (SAME_PROCESS) return Bus.isHoseAttached();
-        return pollHose(); // device-poll mode
-    }
+    private void wireAttachmentGetter() {
+        // Try ui.HoseGUI first
+        providerClass = tryClass("ui.HoseGUI");
+        if (providerClass != null) {
+            mIsAttached = tryAnyStaticBoolean(providerClass, "isAttached", "getAttached");
+        }
 
-    // ---------- device-poll mode ----------
-    private void initDevicePoll() {
-        try {
-            Class<?> dmClass = Class.forName("io.bus.DeviceManager");
-            Class<?> entryClass = Class.forName("io.bus.DeviceManager$Entry");
+        // Try sim.SimDevices next if not found
+        if (mIsAttached == null) {
+            providerClass = tryClass("sim.SimDevices");
+            if (providerClass != null) {
+                mIsAttached = tryAnyStaticBoolean(providerClass, "isHoseAttached", "getHoseAttached", "isAttached", "getAttached");
+            }
+        }
 
-            var entryCtor = entryClass.getConstructor(String.class, String.class, int.class, String.class, String.class);
-            Object entry = entryCtor.newInstance(HOSE_ENTRY_NAME, HOST, PORT, DEVICE_ID, KIND);
-
-            var list = java.util.List.of(entry);
-            var dmCtor = dmClass.getConstructor(java.util.List.class);
-            deviceManager = dmCtor.newInstance(list);
-
-            // call dm.binary(String) -> BinaryDevice
-            var binaryMethod = dmClass.getMethod("binary", String.class);
-            hoseDevice = binaryMethod.invoke(deviceManager, HOSE_ENTRY_NAME);
-
-            System.out.println("[PumpGUI] Device-poll initialized");
-        } catch (Throwable t) {
-            System.err.println("[PumpGUI] Device-poll init FAILED: " + t);
-            deviceManager = null;
-            hoseDevice = null;
+        if (mIsAttached != null) {
+            System.out.println("[PumpGUI] Attached provider wired: " +
+                    providerClass.getName() + "." + mIsAttached.getName() + "()");
+        } else {
+            System.out.println("[PumpGUI] No attached provider found. Press 'A' to toggle for testing.");
         }
     }
 
-    private boolean pollHose() {
-        if (hoseDevice == null) return false;
-        try {
-            // BinaryDevice#get() -> boolean
-            var m = hoseDevice.getClass().getMethod("get");
-            Object v = m.invoke(hoseDevice);
-            return (v instanceof Boolean b) ? b : false;
-        } catch (Throwable t) {
-            System.err.println("[PumpGUI] pollHose failed: " + t);
-            return false;
+    private static Class<?> tryClass(String name) {
+        try { return Class.forName(name); } catch (Throwable ignored) {}
+        return null;
+    }
+
+    private static Method tryAnyStaticBoolean(Class<?> cls, String... names) {
+        for (String n : names) {
+            try {
+                Method m = cls.getMethod(n);
+                if ((m.getModifiers() & java.lang.reflect.Modifier.STATIC) != 0 &&
+                        (m.getReturnType() == boolean.class || m.getReturnType() == Boolean.class)) {
+                    return m;
+                }
+            } catch (Throwable ignored) {}
+        }
+        return null;
+    }
+
+    private static Image load(String path) {
+        try (InputStream in = PumpGUI.class.getResourceAsStream(path)) {
+            if (in == null) return null;
+            return new Image(in);
+        } catch (Exception e) {
+            return null;
         }
     }
 
-    // ---------- image loading ----------
-    private Image load(String filename) {
-        var url = PumpGUI.class.getResource(BASE + filename);
-        if (url != null) {
-            return new Image(url.toExternalForm(), false);
-        }
-        // dev fallback if classpath fails
-        var p = java.nio.file.Paths.get("resources/images/pump/" + filename);
-        if (java.nio.file.Files.exists(p)) {
-            return new Image(p.toUri().toString(), false);
-        }
-        System.err.println("[PumpGUI] Image NOT FOUND: " + filename + "  cwd=" + System.getProperty("user.dir"));
-        return new javafx.scene.image.WritableImage(360, 240); // obvious blank
+    private static void warnMissing(String name) {
+        System.out.println("[PumpGUI] WARN: image not found: " + name + " (check resources " + BASE + ")");
     }
 
     @Override
     public void stop() {
         if (loop != null) loop.stop();
-        // close DeviceManager if we opened it
-        if (deviceManager != null) {
-            try {
-                var m = deviceManager.getClass().getMethod("close");
-                m.invoke(deviceManager);
-            } catch (Throwable ignored) {}
-        }
     }
 
-    public static void main(String[] args) { launch(args); }
+    public static void main(String[] args) {
+        launch(args);
+    }
 }
-

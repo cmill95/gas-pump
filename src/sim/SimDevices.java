@@ -168,6 +168,9 @@ public final class SimDevices {
         String handle(String line) {
 
             if (line.equals("SCREEN|GETSTATE|MAIN|None")) {
+
+                String gradeSuffix = (pendingGrade != null && !pendingGrade.isBlank()) ? (":" + pendingGrade) : "";
+
                 return "MAIN|REPLY|SCREEN|\"STATE:" + screenState + "\"";
             }
             if (line.startsWith("SCREEN|DEVCTL|MAIN|")) {
@@ -363,6 +366,10 @@ public final class SimDevices {
                 } catch (Exception e) {
                     return "MAIN|REPLY|HOSECTRL|\"ERR:BAD_CUR\"";
                 }
+            }
+
+            if (line.equals("HOSE|GET|MAIN|attached")) {
+                return "MAIN|REPLY|HOSE|\"" + (hoseAttached ? "true" : "false") + "\"";
             }
             return "MAIN|REPLY|HOSECTRL|\"ERR:UNKNOWN_COMMAND\"";
         }
