@@ -309,6 +309,14 @@ public class Main {
                         String usdFmt  = String.format(java.util.Locale.US, "%.2f", usdShown);
                         sc.show("FUELING_NUM:" + galsFmt + "," + usdFmt);
 
+                        try {
+                            // S:1 while fueling, S:0 otherwise
+                            flowmeter.request(
+                                    String.format(java.util.Locale.US,
+                                            "FLOWMETER|UPDATE|MAIN|G:%.3f,S:%d", galShown, (isAttached && !isFull) ? 1 : 0),
+                                    Duration.ofMillis(500));
+                        } catch (Exception ignore) {}
+
                         if (isFull) {
                             // Compute/Clamp the final numbers you want to show
                             double finalGallons = Math.min(dispensedGal, remainingTargetGal); // or whatever your accumulator is named
@@ -325,6 +333,13 @@ public class Main {
 
                             // 3) Linger 5s on the receipt-style screen
                             Thread.sleep(THANK_YOU_DWELL_MS);
+
+                            try {
+                                flowmeter.request(
+                                        String.format(java.util.Locale.US,
+                                                "FLOWMETER|UPDATE|MAIN|G:%.3f,S:0", finalGallons),
+                                        Duration.ofMillis(500));
+                            } catch (Exception ignore) {}
 
                             // 4) Back to welcome
                             sc.showWelcome();

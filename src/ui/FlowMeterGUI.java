@@ -4,6 +4,7 @@ import javafx.animation.Animation;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.SimpleIntegerProperty;
 import javafx.geometry.Insets;
@@ -27,8 +28,11 @@ import javafx.scene.text.Font;
 import javafx.scene.text.Text;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
-import javafx.util.Duration;
+import java.time.Duration;
+import io.bus.DeviceLink;
+import io.bus.DeviceManager;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -41,6 +45,8 @@ import java.util.List;
  */
 
 public class FlowMeterGUI extends Application {
+
+
 
     private static final String RES_PATH = "/images/flowMeter/";
     private static final double SCREEN_MULTIPLIER = 0.30; // 30 % of monitor height
@@ -56,10 +62,19 @@ public class FlowMeterGUI extends Application {
     private Text readout;
     private StackPane spritePane;
 
+    private DeviceManager dm;
+    private DeviceLink flowMeterCtrl;
+
     // JavaFX lifecycle
 
     @Override
-    public void start(Stage stage) {
+    public void start(Stage stage) throws Exception {
+        // Device connections
+        var entries = List.of(
+                new DeviceManager.Entry("flowmeter-ctrl", "127.0.0.1", 5621, "flowmeter-ctrl", "flowmeter")
+        );
+        dm = new DeviceManager(entries);
+        flowMeterCtrl = dm.link("flowmeter-ctrl");
 
         // Load resources
         frames.add(loadFrame("FM-1-1.png"));
@@ -102,15 +117,17 @@ public class FlowMeterGUI extends Application {
 
 
         // Sprite animation
-        Timeline anim = new Timeline(new KeyFrame(Duration.seconds(0.12), e -> toggleFrame()));
+        Timeline anim = new Timeline(new KeyFrame(javafx.util.Duration.seconds(0.12), e -> toggleFrame()));
         anim.setCycleCount(Animation.INDEFINITE);
         anim.play();
 
 
         // DEMO‑ONLY logic
-        simulateFlow(); // <— Remove when wiring to real device
+        //simulateFlow(); // <— Remove when wiring to real device
 
         stage.show();
+        startPolling();
+
     }
 
 
@@ -132,12 +149,62 @@ public class FlowMeterGUI extends Application {
     // Temporary stand‑alone simulation
     private void simulateFlow() {
         flowing = true;
-        Timeline t = new Timeline(new KeyFrame(Duration.seconds(0.1), e -> {
+        Timeline t = new Timeline(new KeyFrame(javafx.util.Duration.seconds(0.1), e -> {
             gallons += 0.005; // +0.005 gal every 100 ms → 3 GPM demo
             updateReadout();
         }));
         t.setCycleCount(Animation.INDEFINITE);
         t.play();
+    }
+
+    private void startPolling() {
+        Thread t = new Thread(() -> {
+            try {
+                while (true) {
+                    String r = flowMeterCtrl.request("FLOWCTRL|GETSTATE|MAIN|None", Duration.ofSeconds(1));
+                    String payload = extractQuoted(r);
+                    boolean flowingNow = payload.contains("STATE:1");
+                    double gallonsNow = parseGallons(payload);
+                    Platform.runLater(() -> updateFromDevice(gallonsNow, flowingNow));
+                    Thread.sleep(300);
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }, "flowmeter-poll");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    private double parseGallons(String payload) {
+        try {
+            int i = payload.indexOf("GALLONS:");
+            if (i >= 0) return Double.parseDouble(payload.substring(i + 8).trim());
+        } catch (Exception ignored) {}
+        return 0.0;
+    }
+
+
+    private static String extractQuoted(String s) {
+        if (s == null) return "";
+        int q1 = s.indexOf('"'); if (q1 < 0) return "";
+        int q2 = s.indexOf('"', q1 + 1); if (q2 < 0) return "";
+        return s.substring(q1 + 1, q2);
+    }
+
+    private void startFlowUpdates() {
+        flowing = true;
+        Timeline t = new Timeline(new KeyFrame(javafx.util.Duration.seconds(0.1), e -> {
+            gallons += 0.005;
+            updateReadout();
+        }));
+        t.setCycleCount(Animation.INDEFINITE);
+        t.play();
+    }
+
+    @Override
+    public void stop() throws Exception {
+        if (dm != null) dm.close();
     }
 
     /**
