@@ -17,17 +17,7 @@ import javafx.util.Duration;
 import java.io.InputStream;
 import java.lang.reflect.Method;
 
-/**
- * Minimal animation logic:
- *   not attached -> P-0.png
- *   attached     -> toggle P-1-0-0.png and P-1-0-1.png
- *
- * Attempts to read "attached" from existing code (unchanged):
- *   - ui.HoseGUI.isAttached() or getAttached()
- *   - sim.SimDevices.isHoseAttached() or getHoseAttached()
- *
- * If none found, press 'A' to toggle locally for testing.
- */
+
 public class PumpGUI extends Application {
 
     // --- image names (under resources /images/pump/) ---
