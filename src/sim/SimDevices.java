@@ -12,6 +12,8 @@ public final class SimDevices {
     private static volatile boolean hoseAttached = false;
     private static volatile boolean hoseFull = false;
     private static volatile boolean hoseArmed    = false;
+    static volatile double flowGallons = 0.0;   // what FlowMeter should display
+    static volatile boolean flowPumping = false; // 1 when actively dispensing
     static volatile String screenState = "WELCOME";
     static volatile String pendingGrade = null;
     static volatile String pendingTap = null;
@@ -461,32 +463,121 @@ public final class SimDevices {
         }
 
         static final class FlowMeterServer extends SimServer {
-            FlowMeterServer(String id, int port) {
-                super(id, port);
-            }
-            @Override
-            String deviceName() {
-                return "FLOWMETER";
-            }
+            FlowMeterServer(String id, int port) { super(id, port); }
+
+            @Override String deviceName() { return "FLOWMETER"; }
+
             @Override
             String handle(String line) {
 
-                return line;
+                if (line.startsWith("FLOWMETER|SET|GALLONS|")) {
+                    try {
+                        double g = Double.parseDouble(line.substring("FLOWMETER|SET|GALLONS|".length()).trim());
+                        SimDevices.flowGallons = Math.max(0.0, g);
+                        System.out.printf("[sim] FLOWMETER SET GALLONS -> %.3f%n", SimDevices.flowGallons);
+                        return "MAIN|REPLY|FLOWMETER|\"OK\"";
+                    } catch (Exception e) {
+                        return "MAIN|REPLY|FLOWMETER|\"ERR:BAD_GALLONS\"";
+                    }
+                }
+
+                if (line.startsWith("FLOWMETER|UPDATE|MAIN|")) {
+                    // Payload like: G:12.345,S:1
+                    String payload = line.substring("FLOWMETER|UPDATE|MAIN|".length()).trim();
+                    double g = SimDevices.flowGallons;
+                    boolean pumping = SimDevices.flowPumping;
+
+                    try {
+                        for (String kv : payload.split(",")) {
+                            kv = kv.trim();
+                            if (kv.startsWith("G:")) g = Double.parseDouble(kv.substring(2).trim());
+                            if (kv.startsWith("S:")) pumping = Integer.parseInt(kv.substring(2).trim()) != 0;
+                        }
+
+                        SimDevices.flowGallons = Math.max(0.0, g);
+                        SimDevices.flowPumping = pumping;
+                        System.out.printf("[sim] FLOWMETER UPDATE -> G=%.3f, S=%d%n",
+                                SimDevices.flowGallons, SimDevices.flowPumping ? 1 : 0);
+                        return "MAIN|REPLY|FLOWMETER|\"OK\"";
+
+                    } catch (Exception e) {
+                        return "MAIN|REPLY|FLOWMETER|\"ERR:BAD_UPDATE\"";
+                    }
+                }
+
+                if (line.equals("FLOWMETER|RESET|MAIN|None")) {
+                    SimDevices.flowGallons = 0.0;
+                    SimDevices.flowPumping = false;
+                    System.out.println("[sim] FLOWMETER RESET -> gallons=0, pumping=0");
+                    return "MAIN|REPLY|FLOWMETER|\"OK\"";
+                }
+
+                // GUIs (FlowMeterGUI) poll this
+                if (line.equals("FLOWMETER|GETSTATE|MAIN|None")) {
+                    String payload = String.format(java.util.Locale.US,
+                            "STATE:%d,GALLONS:%.3f",
+                            SimDevices.flowPumping ? 1 : 0,
+                            SimDevices.flowGallons);
+                    // debug print
+                    System.out.println("[sim] FLOWMETER GETSTATE -> " + payload);
+                    return "MAIN|REPLY|FLOWMETER|\"" + payload + "\"";
+                }
+
+                System.out.println("[sim] FLOWMETER UNKNOWN -> " + line);
+                return "MAIN|REPLY|FLOWMETER|\"ERR:UNKNOWN_COMMAND\"";
             }
         }
 
         static final class FlowMeterControlServer extends SimServer {
-            FlowMeterControlServer(String id, int port) {
-                super(id, port);
-            }
-            @Override
-            String deviceName() {
-                return "FLOWCTRL";
-            }
+            FlowMeterControlServer(String id, int port) { super(id, port); }
+
+            @Override String deviceName() { return "FLOWCTRL"; }
+
             @Override
             String handle(String line) {
 
-                return line;
+                if (line.startsWith("FLOWCTRL|SETSTATE|MAIN|")) {
+                    String v = line.substring("FLOWCTRL|SETSTATE|MAIN|".length()).trim();
+                    SimDevices.flowPumping = "1".equals(v);
+                    System.out.println("[sim] FLOWCTRL SETSTATE -> " + (SimDevices.flowPumping ? "1" : "0"));
+                    return "MAIN|REPLY|FLOWCTRL|\"OK\"";
+                }
+
+                if (line.startsWith("FLOWCTRL|SETGAL|MAIN|")) {
+                    try {
+                        double g = Double.parseDouble(line.substring("FLOWCTRL|SETGAL|MAIN|".length()).trim());
+                        SimDevices.flowGallons = Math.max(0.0, g);
+                        System.out.printf("[sim] FLOWCTRL SETGAL -> %.3f%n", SimDevices.flowGallons);
+                        return "MAIN|REPLY|FLOWCTRL|\"OK\"";
+                    } catch (Exception e) {
+                        return "MAIN|REPLY|FLOWCTRL|\"ERR:BAD_GAL\"";
+                    }
+                }
+
+                if (line.equals("FLOWCTRL|RESET|MAIN|None")) {
+                    SimDevices.flowGallons = 0.0;
+                    SimDevices.flowPumping = false;
+                    System.out.println("[sim] FLOWCTRL RESET -> gallons=0, pumping=0");
+                    return "MAIN|REPLY|FLOWCTRL|\"OK\"";
+                }
+
+                if (line.equals("FLOWCTRL|GETSTATE|MAIN|None") || line.equals("FLOWMETER|GETSTATE|MAIN|None")) {
+                    String payload = String.format(java.util.Locale.US,
+                            "STATE:%d,GALLONS:%.3f",
+                            SimDevices.flowPumping ? 1 : 0,
+                            SimDevices.flowGallons);
+                    System.out.println("[sim] FLOWCTRL GETSTATE -> " + payload);
+                    return "MAIN|REPLY|FLOWMETER|\"" + payload + "\"";
+                }
+
+                System.out.println("[sim] FLOWCTRL UNKNOWN -> " + line);
+                return "MAIN|REPLY|FLOWCTRL|\"ERR:UNKNOWN_COMMAND\"";
             }
+        }
+
+        // Shared update used by Main to reflect live fuel flow
+        public static synchronized void updateFlow(double gallons, boolean pumping) {
+            flowGallons = Math.max(0.0, gallons);
+            flowPumping = pumping;
         }
     }
